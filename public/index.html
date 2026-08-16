@@ -442,10 +442,10 @@
     <div class="eyebrow">Dual-tone symbol set &nbsp;/&nbsp; 36 characters</div>
     <h1>An alphabet you <em>hear</em>, not read</h1>
     <p class="standfirst">
-      Every character is a pair of pure tones. A whole word sounds them
-      <strong>all at once</strong> — one chord per word, not a string of beeps — and each
-      word still decodes back to text. Type a message to hear it, then play it at the
-      microphone and watch it reassemble out of the air.
+      Every character is a pair of notes drawn from a single scale, so a whole word sounds
+      <strong>all at once</strong> as one chord in a key — not a string of beeps. And it
+      still decodes: type a message to hear it, then play it at the microphone and watch it
+      reassemble out of the air.
     </p>
   </header>
 
@@ -530,30 +530,30 @@
   <section>
     <div class="panel-head">
       <h2>How a word becomes one sound</h2>
-      <span class="panel-note">Position-keyed banks &nbsp;/&nbsp; 5 slots × 12 tones</span>
+      <span class="panel-note">A Dorian &nbsp;/&nbsp; 3 registers × 9 notes</span>
     </div>
     <div class="panel-body">
       <div class="prose">
         <p>
-          Sounding a word's letters simultaneously is ambiguous if they all draw on the same
-          two banks. Five letters would put five row tones and five column tones in the air
-          at once, pairable twenty-five ways, and <strong>LISTEN</strong> and
-          <strong>SILENT</strong> would be the same sound — same letters, same chord.
+          Every tone is a real note of one scale — <strong>A Dorian</strong>, from C4 up to
+          A7. Nothing lands between pitches, so whatever letters you happen to sound together
+          stack into a chord that belongs to a key rather than a cluster of arbitrary
+          frequencies.
         </p>
         <p>
-          So each <em>position</em> in the word gets its own pair of banks. The first letter
-          draws from one set of twelve frequencies, the second from a different twelve, and
-          so on across five slots — sixty distinct tones spanning 400 to 3600 Hz. Because no
-          two positions share a frequency, overlapping letters never compete: the pairing is
-          unambiguous, order is preserved, and anagrams sound different. Every letter still
-          rings for the full duration, so what you hear is one chord.
+          A letter is a <em>pair</em> of notes, and the interval between them is what
+          identifies it. Nine notes yield exactly thirty-six pairs — one per character, with
+          none left over. Each position in the word owns its own nine-note register, stacked
+          low to high, so the first letter sings in the bottom octave, the second above it,
+          the third above that. Because the registers do not overlap, two letters can never
+          claim the same note: the reading stays unambiguous and anagrams still sound
+          different.
         </p>
         <p>
-          The tones are dealt round-robin rather than in blocks, so each slot's frequencies
-          are spread across the whole band instead of clustered — no position lands entirely
-          where a speaker or a room happens to be weak. Words longer than five letters break
-          into consecutive chords, and the receiver reads each chord in a single shot once
-          it has stopped ringing.
+          The scale is deliberately gapped. Its notes sit at least 22 Hz apart — nearly four
+          analysis bins — which is what lets the receiver separate them at all. A denser
+          scale would sound richer and decode worse; this is the trade that keeps the chord
+          both musical and readable.
         </p>
       </div>
     </div>
@@ -608,9 +608,12 @@
           <tr><td>Confirmation</td><td class="v">3 consecutive windows</td><td>One noisy window can't invent a letter</td></tr>
           <tr><td>Word break</td><td class="v">Silence ≥ 2.2× gap, or ≥ 1 symbol</td><td>Learned from the signal; no fixed rate assumed</td></tr>
           <tr><td colspan="3" style="border-bottom:none;padding-top:16px;color:var(--trace-dim);font-size:10px;letter-spacing:.12em">WHOLE-WORD CHORD MODE</td></tr>
-          <tr><td>Slots</td><td class="v">5 letters per chord</td><td>Longer words split into consecutive chords</td></tr>
-          <tr><td>Chord banks</td><td class="v">60 tones, 400–3600 Hz</td><td>12 per slot, dealt round-robin across the band</td></tr>
-          <tr><td>Tone spacing</td><td class="v">≥ 15 Hz (2.6 bins)</td><td>Resolvable in an 8192-sample window</td></tr>
+          <tr><td>Scale</td><td class="v">A Dorian, C4–A7</td><td>Every tone is a real note, so chords are consonant</td></tr>
+          <tr><td>Slots</td><td class="v">3 letters per chord</td><td>Longer words split into consecutive chords</td></tr>
+          <tr><td>Registers</td><td class="v">9 notes each, non-overlapping</td><td>C(9,2) = 36 pairs, exactly one per character</td></tr>
+          <tr><td>Letter</td><td class="v">A pair of notes</td><td>The interval carries the character</td></tr>
+          <tr><td>Timbre</td><td class="v">Triangle wave</td><td>Body without harmonics that mask a neighbour</td></tr>
+          <tr><td>Note spacing</td><td class="v">≥ 22 Hz (3.8 bins)</td><td>Resolvable in an 8192-sample window</td></tr>
           <tr><td>Chord length</td><td class="v">≥ 380 ms</td><td>Long enough to resolve 15 Hz apart</td></tr>
           <tr><td>Analysis</td><td class="v">8192 samples, Hann window</td><td>Windowing stops one slot leaking into the next</td></tr>
           <tr><td>Slot occupied</td><td class="v">≥ 6% of peak slot, 3× its band</td><td>Relative, so clean signals don't divide by zero</td></tr>
@@ -649,22 +652,38 @@
   // pairing is unambiguous, and LISTEN and SILENT are distinct — while all
   // the letters still ring at once as a single chord.
 
-  const SLOTS = 5;                       // letters per chord; longer words chunk
-  const F_LO = 400, F_HI = 3600;         // comfortably inside speaker/mic range
-  const NF = SLOTS * 12;
-  const GRID = [...Array(NF)].map((_, i) =>
-    Math.round(F_LO * Math.pow(F_HI / F_LO, i / (NF - 1))));
+  // Every tone is a real note of one scale — A Dorian — so any combination of
+  // letters stacks into a consonant chord rather than a cluster of arbitrary
+  // frequencies. A letter is a PAIR of notes drawn from its slot's nine-note
+  // register: nine notes give exactly 36 pairs, one per character, and the
+  // interval carries the letter.
 
-  // Deal the grid round-robin so each slot's tones are spread across the whole
-  // band rather than stacked in one region — no slot sits where a speaker or
-  // room happens to be weak.
-  const BANKS = [...Array(SLOTS)].map((_, s) => ({
-    rows: [...Array(6)].map((_, i) => GRID[(i * 2) * SLOTS + s]),
-    cols: [...Array(6)].map((_, i) => GRID[(i * 2 + 1) * SLOTS + s])
-  }));
+  const SLOTS = 3;                       // letters per chord; longer words chunk
+  const PER = 9;                         // notes per slot -> C(9,2) = 36 pairs
+  const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  // A Dorian, kept between 260 Hz and 3.6 kHz: low enough to sound warm, high
+  // enough that adjacent notes stay >20 Hz apart and remain resolvable.
+  const SCALE_DEG = [0, 2, 3, 5, 7, 9, 10];
+  const SCALE_ROOT = 45;                 // A
+  const SCALE_NOTES = [];
+  for (let m = 48; m <= 105 && SCALE_NOTES.length < SLOTS * PER; m++) {
+    if (!SCALE_DEG.includes((((m - SCALE_ROOT) % 12) + 12) % 12)) continue;
+    const f = midiHz(m);
+    if (f >= 260 && f <= 3600) SCALE_NOTES.push(m);
+  }
+
+  // Each slot owns a contiguous register, so the word reads low-to-high and no
+  // two positions can claim the same note.
+  const BANKS = [...Array(SLOTS)].map((_, s) =>
+    SCALE_NOTES.slice(s * PER, (s + 1) * PER).map(midiHz));
+
+  // The 36 unordered pairs, in a fixed order: pair index == character index.
+  const PAIRS = [];
+  for (let i = 0; i < PER; i++) for (let j = i + 1; j < PER; j++) PAIRS.push([i, j]);
+
   const CHORD_F = [];
-  BANKS.forEach(b => CHORD_F.push(...b.rows, ...b.cols));
-  const CHORD_IDX = new Map(CHORD_F.map((f, i) => [f, i]));
+  BANKS.forEach(b => CHORD_F.push(...b));
 
   // Split a message into the chords that will be sounded: one per word, with
   // words longer than SLOTS broken into consecutive chunks.
@@ -809,9 +828,12 @@
       const per = a.createGain();
       per.gain.value = scale;
       per.connect(g);
-      [BANKS[i].rows[Math.floor(k / 6)], BANKS[i].cols[k % 6]].forEach(f => {
+      const [lo, hi] = PAIRS[k];
+      [BANKS[i][lo], BANKS[i][hi]].forEach(f => {
+        // A triangle wave gives the note a little body — its harmonics fall
+        // away fast enough (1/n²) that they never mask a neighbouring note.
         const o = a.createOscillator();
-        o.type = "sine";
+        o.type = "triangle";
         o.frequency.value = f;
         o.connect(per);
         o.start(at);
@@ -1185,25 +1207,23 @@
 
     const slot = [];
     for (let s = 0; s < SLOTS; s++) {
-      const rE = BANKS[s].rows.map(f => e[CHORD_IDX.get(f)]);
-      const cE = BANKS[s].cols.map(f => e[CHORD_IDX.get(f)]);
-      let ri = 0, ci = 0;
-      for (let i = 1; i < 6; i++) {
-        if (rE[i] > rE[ri]) ri = i;
-        if (cE[i] > cE[ci]) ci = i;
-      }
-      const rSib = [...rE].sort((a, b) => b - a)[1] || 0;
-      const cSib = [...cE].sort((a, b) => b - a)[1] || 0;
+      // Two notes are sounding in this register; the pair identifies the
+      // letter. Rank the nine and take the top two.
+      const mine = e.slice(s * PER, (s + 1) * PER);
+      const rank = mine.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
+      const [lo, hi] = [rank[0][1], rank[1][1]].sort((a, b) => a - b);
+      const k = PAIRS.findIndex(([x, y]) => x === lo && y === hi);
       slot.push({
-        ch: CHARS[ri * 6 + ci],
-        power: Math.min(rE[ri], cE[ci]),
-        contrast: Math.min(rE[ri] / (rSib || 1e-30), cE[ci] / (cSib || 1e-30))
+        ch: k >= 0 ? CHARS[k] : "",
+        power: Math.min(rank[0][0], rank[1][0]),
+        // The second real note must stand clear of the loudest non-note.
+        contrast: rank[1][0] / (rank[2][0] || 1e-30)
       });
     }
     const peak = Math.max(...slot.map(x => x.power)) || 1e-30;
     let txt = "";
     for (let s = 0; s < SLOTS; s++) {
-      if (slot[s].power / peak < 0.06 || slot[s].contrast < 3) break;
+      if (!slot[s].ch || slot[s].power / peak < 0.06 || slot[s].contrast < 2.5) break;
       txt += slot[s].ch;
     }
     return txt;

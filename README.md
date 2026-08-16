@@ -56,24 +56,31 @@ non-zero on failure.
 
 ### Whole-word chords
 
-Sounding a word's letters simultaneously is ambiguous if they all draw on the same
-two banks: five letters put five row tones and five column tones in the air at once,
-pairable 25 ways — and `LISTEN` and `SILENT` would be *the same sound*.
+Every tone is a real note of one scale — **A Dorian**, C4 to A7 — so whatever letters
+sound together stack into a chord that belongs to a key, rather than a cluster of
+arbitrary frequencies.
 
-So **each position in the word gets its own pair of banks**. The first letter draws
-from one set of twelve frequencies, the second from a different twelve, across five
-slots — 60 distinct tones spanning 400–3600 Hz. No two positions share a frequency,
-so overlapping letters never compete: the pairing is unambiguous, order survives, and
-anagrams differ. Every letter rings for the full duration, so it is heard as one chord.
+A letter is a **pair of notes**, and the interval identifies it. Nine notes give
+exactly `C(9,2) = 36` pairs, one per character with none left over. Each position in
+the word owns its own nine-note register, stacked low to high, so registers never
+overlap and two letters can never claim the same note — the reading stays unambiguous
+and anagrams still differ.
 
 | | |
 |---|---|
-| Slots | 5 letters per chord (longer words chunk) |
-| Banks | 60 tones, 400–3600 Hz, 12 per slot |
-| Spacing | ≥ 15 Hz (2.6 bins at the analysis window) |
+| Scale | A Dorian, C4–A7 (27 notes) |
+| Slots | 3 letters per chord (longer words chunk) |
+| Registers | 9 notes each, non-overlapping |
+| Letter | a pair of notes; the interval carries it |
+| Timbre | triangle wave |
+| Spacing | ≥ 22 Hz (3.8 bins at the analysis window) |
 | Chord length | ≥ 380 ms |
 | Analysis | 8192 samples, Hann-windowed, read once per chord |
-| Slot occupied | ≥ 6% of the loudest slot, and 3× its own band |
+| Slot occupied | ≥ 6% of the loudest slot, and 2.5× its own register |
+
+The scale is deliberately gapped: its notes sit far enough apart to be separable at
+the analysis window. A denser scale sounds richer and decodes worse — that trade is
+what fixes the note count at 27, and so the slots at 3.
 
 Occupancy is judged *relative to the loudest slot* rather than an absolute floor. On
 a clean signal an empty slot sits near zero, and any ratio taken against zero

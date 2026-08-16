@@ -1,4 +1,4 @@
-// Extract the chord decoder from the shipped page and test it.
+// Extract the melodic chord codec from the shipped page and test it.
 const fs=require('fs'),path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'..','public','index.html'),'utf8');
 function grab(sig){
@@ -7,52 +7,64 @@ function grab(sig){
   for(;j<html.length;j++){if(html[j]==='{')d++;else if(html[j]==='}'){d--;if(!d){j++;break;}}}
   return html.slice(i,j);
 }
-// constants straight from the page
-function num(re){const m=html.match(re); if(!m) throw new Error('no '+re); return Number(m[1]);}
-const SLOTS=num(/const SLOTS = (\d+)/), F_LO=num(/F_LO = (\d+)/), F_HI=num(/F_HI = (\d+)/);
+const num=re=>{const m=html.match(re);if(!m)throw new Error('no '+re);return Number(m[1]);};
+const SLOTS=num(/const SLOTS = (\d+)/), PER=num(/const PER = (\d+)/), CWIN=num(/const CWIN = (\d+)/);
 const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const NF=SLOTS*12;
-const GRID=[...Array(NF)].map((_,i)=>Math.round(F_LO*Math.pow(F_HI/F_LO,i/(NF-1))));
-const BANKS=[...Array(SLOTS)].map((_,s)=>({
-  rows:[...Array(6)].map((_,i)=>GRID[(i*2)*SLOTS+s]),
-  cols:[...Array(6)].map((_,i)=>GRID[(i*2+1)*SLOTS+s]),
-}));
-const CHORD_F=[];BANKS.forEach(b=>CHORD_F.push(...b.rows,...b.cols));
-const CHORD_IDX=new Map(CHORD_F.map((f,i)=>[f,i]));
-const CWIN=num(/const CWIN = (\d+)/);
+const midiHz=m=>440*Math.pow(2,(m-69)/12);
+const SCALE_DEG=JSON.parse(html.match(/const SCALE_DEG = (\[[^\]]+\])/)[1]);
+const SCALE_ROOT=num(/const SCALE_ROOT = (\d+)/);
+const SCALE_NOTES=[];
+for(let m=48;m<=105&&SCALE_NOTES.length<SLOTS*PER;m++){
+  if(!SCALE_DEG.includes((((m-SCALE_ROOT)%12)+12)%12))continue;
+  const f=midiHz(m); if(f>=260&&f<=3600) SCALE_NOTES.push(m);
+}
+const BANKS=[...Array(SLOTS)].map((_,s)=>SCALE_NOTES.slice(s*PER,(s+1)*PER).map(midiHz));
+const PAIRS=[];for(let i=0;i<PER;i++)for(let j=i+1;j<PER;j++)PAIRS.push([i,j]);
+const CHORD_F=[];BANKS.forEach(b=>CHORD_F.push(...b));
+const SR=48000, ac={sampleRate:SR};
 const CHANN=new Float32Array(CWIN);
 for(let i=0;i<CWIN;i++)CHANN[i]=0.5-0.5*Math.cos(2*Math.PI*i/(CWIN-1));
-const SR=48000; const ac={sampleRate:SR};
 eval(grab('function goertzel(buf, sampleRate, freq)'));
 eval(grab('function decodeChordAt(buf)'));
 eval(grab('function chordsOf(msg)'));
 
-// sanity on the frequency plan
-const uniq=[...new Set(CHORD_F)].sort((a,b)=>a-b);
-let minGap=1e9;for(let i=1;i<uniq.length;i++)minGap=Math.min(minGap,uniq[i]-uniq[i-1]);
-console.log(`banks: ${uniq.length}/${NF} distinct, ${F_LO}-${F_HI}Hz, min gap ${minGap}Hz = ${(minGap/(SR/CWIN)).toFixed(1)} bins`);
+const NAME=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const nm=f=>{const m=Math.round(69+12*Math.log2(f/440));return NAME[((m%12)+12)%12]+(Math.floor(m/12)-1);};
+console.log(`scale: ${SCALE_NOTES.length} notes, ${CHORD_F[0].toFixed(0)}-${CHORD_F[CHORD_F.length-1].toFixed(0)}Hz`);
+BANKS.forEach((b,s)=>console.log(`  slot${s}: ${b.map(nm).join(" ")}`));
+let mg=1e9;const S=[...CHORD_F].sort((a,b)=>a-b);
+for(let i=1;i<S.length;i++)mg=Math.min(mg,S[i]-S[i-1]);
+console.log(`min gap ${mg.toFixed(1)}Hz = ${(mg/(SR/CWIN)).toFixed(1)} bins`);
+// every tone must be a real scale note
+const offs=new Set(CHORD_F.map(f=>{const m=Math.round(69+12*Math.log2(f/440));return (((m-SCALE_ROOT)%12)+12)%12;}));
+console.log(`scale degrees used: [${[...offs].sort((a,b)=>a-b)}] all in [${SCALE_DEG}] -> ${[...offs].every(o=>SCALE_DEG.includes(o))?"ALL MUSICAL":"OFF-SCALE"}`);
 
+// triangle wave, matching the page
 function synth(txt,durMs,noise){
-  const n=Math.round(SR*durMs/1000),out=new Float32Array(n),ramp=Math.round(SR*0.02);
-  const scale=1/Math.sqrt(Math.max(1,txt.length));
+  const n=Math.round(SR*durMs/1000),out=new Float32Array(n),ramp=Math.round(SR*0.025);
+  const sc=1/Math.sqrt(Math.max(1,txt.length));
   [...txt].forEach((ch,i)=>{
     const k=CHARS.indexOf(ch); if(k<0||i>=SLOTS)return;
-    const rf=BANKS[i].rows[Math.floor(k/6)],cf=BANKS[i].cols[k%6];
-    for(let j=0;j<n;j++){
-      let e=1;if(j<ramp)e=j/ramp;else if(j>n-ramp)e=(n-j)/ramp;
-      out[j]+=e*0.32*scale*(Math.sin(2*Math.PI*rf*j/SR)+Math.sin(2*Math.PI*cf*j/SR));
+    const [lo,hi]=PAIRS[k];
+    for(const f of [BANKS[i][lo],BANKS[i][hi]]){
+      for(let j=0;j<n;j++){
+        let e=1;if(j<ramp)e=j/ramp;else if(j>n-ramp)e=(n-j)/ramp;
+        // triangle via odd harmonics 1/n^2
+        let v=0;for(let h=1;h<=9;h+=2) v+=(h%4===1?1:-1)*Math.sin(2*Math.PI*h*f*j/SR)/(h*h);
+        out[j]+=e*0.30*sc*v*(8/(Math.PI*Math.PI));
+      }
     }
   });
   if(noise)for(let j=0;j<n;j++)out[j]+=noise*(Math.random()*2-1);
   return out;
 }
-const words=["HELLO","WORLD","SOUND","CAT","LISTE","AB","TONE","A","ZZZZZ","ABCDE","QUART","42","OK","XY9","B","MM","WORDS"];
-console.log("\n=== chord decode (from public/index.html) ===");
+const words=["CAT","ACT","THE","AB","A","ZZZ","ABC","CBA","42","OK","B","MM","XY9","QRS","DOG","SUN"];
+console.log("\n=== melodic decode (from public/index.html) ===");
 let allok=true;
-for(const nz of [0,0.02,0.05,0.10,0.20,0.35]){
+for(const nz of [0,0.02,0.05,0.10,0.20,0.30]){
   let ok=0,bad=[];
   for(const w of words){
-    const sig=synth(w,420,nz);
+    const sig=synth(w,450,nz);
     const mid=Math.max(0,Math.floor(sig.length/2-CWIN/2));
     const g=decodeChordAt(sig.subarray(mid,mid+CWIN));
     if(g===w)ok++;else bad.push(`${w}->${g}`);
@@ -60,16 +72,15 @@ for(const nz of [0,0.02,0.05,0.10,0.20,0.35]){
   if(ok!==words.length)allok=false;
   console.log(`noise=${String(nz).padEnd(5)} ${ok}/${words.length}${bad.length?"  "+bad.slice(0,3).join(" "):""}`);
 }
-console.log("\nanagrams must differ:");
-for(const [a,b] of [["LISTE","SILEN"],["CAT","ACT"],["AB","BA"],["ON","NO"],["ABC","CBA"]]){
-  const ga=decodeChordAt(synth(a,420,0.02).subarray(0,CWIN));
-  const gb=decodeChordAt(synth(b,420,0.02).subarray(0,CWIN));
-  const ok=ga===a&&gb===b&&ga!==gb;
+console.log("\nanagrams:");
+for(const [a,b] of [["CAT","ACT"],["ABC","CBA"],["AB","BA"]]){
+  const f=w=>{const s=synth(w,450,0.02);return decodeChordAt(s.subarray(Math.floor(s.length/2-CWIN/2),Math.floor(s.length/2-CWIN/2)+CWIN));};
+  const ga=f(a),gb=f(b),ok=ga===a&&gb===b&&ga!==gb;
   if(!ok)allok=false;
   console.log(`  ${a}->${ga}  ${b}->${gb}  ${ok?"OK":"FAIL"}`);
 }
 const sil=new Float32Array(CWIN);
-const nz=new Float32Array(CWIN);for(let i=0;i<CWIN;i++)nz[i]=0.3*(Math.random()*2-1);
-console.log(`\nsilence -> "${decodeChordAt(sil)}"   noise -> "${decodeChordAt(nz)}"`);
-console.log("\nchunking:", JSON.stringify(chordsOf("HELLO WORLD TONESCRIPT a-b!")));
+const nzb=new Float32Array(CWIN);for(let i=0;i<CWIN;i++)nzb[i]=0.3*(Math.random()*2-1);
+console.log(`\nsilence -> "${decodeChordAt(sil)}"   noise -> "${decodeChordAt(nzb)}"`);
+console.log("chunking:", JSON.stringify(chordsOf("HELLO WORLD ab")));
 process.exit(allok?0:1);
