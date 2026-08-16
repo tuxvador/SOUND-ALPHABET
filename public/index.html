@@ -219,6 +219,52 @@
     font-weight: 700;
   }
 
+  /* ---------- mode switch ---------- */
+
+  fieldset.modes {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: var(--s3) var(--s4) var(--s4);
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--s3);
+  }
+  fieldset.modes legend { padding: 0 var(--s2); }
+
+  .mode {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "radio name" "radio desc";
+    gap: 0 var(--s3);
+    align-items: baseline;
+    padding: var(--s3);
+    border: 1px solid transparent;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .mode:hover { background: var(--panel-hi); }
+  .mode:has(input:checked) {
+    border-color: var(--trace-dim);
+    background: var(--panel-hi);
+  }
+  .mode:has(input:focus-visible) { outline: 2px solid var(--trace); outline-offset: 1px; }
+  .mode input { grid-area: radio; accent-color: var(--trace); margin: 0; align-self: center; }
+  .mode-name {
+    grid-area: name;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .mode:has(input:checked) .mode-name { color: var(--trace); }
+  .mode-desc {
+    grid-area: desc;
+    font-size: 12px;
+    color: var(--ink-low);
+    line-height: 1.4;
+  }
+
   .slider {
     display: flex;
     align-items: center;
@@ -396,10 +442,10 @@
     <div class="eyebrow">Dual-tone symbol set &nbsp;/&nbsp; 36 characters</div>
     <h1>An alphabet you <em>hear</em>, not read</h1>
     <p class="standfirst">
-      Every character is a chord: two pure tones sounded together, one from the
-      <strong>row</strong> bank and one from the <strong>column</strong> bank. Thirty-six
-      pairs cover A–Z and 0–9. Type a message to hear it spoken in tones — then play it
-      back at the microphone and watch it decode, letter by letter, out of the air.
+      Every character is a pair of pure tones. A whole word sounds them
+      <strong>all at once</strong> — one chord per word, not a string of beeps — and each
+      word still decodes back to text. Type a message to hear it, then play it at the
+      microphone and watch it reassemble out of the air.
     </p>
   </header>
 
@@ -414,6 +460,20 @@
         <span class="field-label">Message</span>
         <textarea id="msg" rows="2" spellcheck="false">HELLO WORLD</textarea>
       </label>
+
+      <fieldset class="modes">
+        <legend class="field-label">Sounding</legend>
+        <label class="mode">
+          <input type="radio" name="mode" value="chord" checked>
+          <span class="mode-name">Whole word</span>
+          <span class="mode-desc">Each word is one chord — every letter sounds at once</span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="seq">
+          <span class="mode-name">Letter by letter</span>
+          <span class="mode-desc">Each letter sounds in turn, spelled out</span>
+        </label>
+      </fieldset>
 
       <div class="row">
         <button class="primary" id="play">▶ Transmit</button>
@@ -457,6 +517,43 @@
           frequency in either bank is a whole-number multiple of another, so the distortion
           harmonics of a real tone never land on top of a different tone — a decoder can't be
           fooled into hearing a letter that was never sent.
+        </p>
+        <p>
+          This grid is the <em>letter-by-letter</em> alphabet. Sounding a whole word at once
+          uses a second, larger set of banks — see below.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHORD SCHEME ============ -->
+  <section>
+    <div class="panel-head">
+      <h2>How a word becomes one sound</h2>
+      <span class="panel-note">Position-keyed banks &nbsp;/&nbsp; 5 slots × 12 tones</span>
+    </div>
+    <div class="panel-body">
+      <div class="prose">
+        <p>
+          Sounding a word's letters simultaneously is ambiguous if they all draw on the same
+          two banks. Five letters would put five row tones and five column tones in the air
+          at once, pairable twenty-five ways, and <strong>LISTEN</strong> and
+          <strong>SILENT</strong> would be the same sound — same letters, same chord.
+        </p>
+        <p>
+          So each <em>position</em> in the word gets its own pair of banks. The first letter
+          draws from one set of twelve frequencies, the second from a different twelve, and
+          so on across five slots — sixty distinct tones spanning 400 to 3600 Hz. Because no
+          two positions share a frequency, overlapping letters never compete: the pairing is
+          unambiguous, order is preserved, and anagrams sound different. Every letter still
+          rings for the full duration, so what you hear is one chord.
+        </p>
+        <p>
+          The tones are dealt round-robin rather than in blocks, so each slot's frequencies
+          are spread across the whole band instead of clustered — no position lands entirely
+          where a speaker or a room happens to be weak. Words longer than five letters break
+          into consecutive chords, and the receiver reads each chord in a single shot once
+          it has stopped ringing.
         </p>
       </div>
     </div>
@@ -510,6 +607,13 @@
           <tr><td>Accept threshold</td><td class="v">6× median bin, both tones</td><td>Rejects speech and room noise</td></tr>
           <tr><td>Confirmation</td><td class="v">3 consecutive windows</td><td>One noisy window can't invent a letter</td></tr>
           <tr><td>Word break</td><td class="v">Silence ≥ 2.2× gap, or ≥ 1 symbol</td><td>Learned from the signal; no fixed rate assumed</td></tr>
+          <tr><td colspan="3" style="border-bottom:none;padding-top:16px;color:var(--trace-dim);font-size:10px;letter-spacing:.12em">WHOLE-WORD CHORD MODE</td></tr>
+          <tr><td>Slots</td><td class="v">5 letters per chord</td><td>Longer words split into consecutive chords</td></tr>
+          <tr><td>Chord banks</td><td class="v">60 tones, 400–3600 Hz</td><td>12 per slot, dealt round-robin across the band</td></tr>
+          <tr><td>Tone spacing</td><td class="v">≥ 15 Hz (2.6 bins)</td><td>Resolvable in an 8192-sample window</td></tr>
+          <tr><td>Chord length</td><td class="v">≥ 380 ms</td><td>Long enough to resolve 15 Hz apart</td></tr>
+          <tr><td>Analysis</td><td class="v">8192 samples, Hann window</td><td>Windowing stops one slot leaking into the next</td></tr>
+          <tr><td>Slot occupied</td><td class="v">≥ 6% of peak slot, 3× its band</td><td>Relative, so clean signals don't divide by zero</td></tr>
         </table>
       </div>
     </div>
@@ -536,7 +640,46 @@
     fromPair.set(r + "," + c, ch);
   });
 
+  // ---- whole-word chords -------------------------------------------------
+  //
+  // Sounding every letter of a word simultaneously is ambiguous on its own:
+  // five row tones and five column tones can be paired 25 ways, and anagrams
+  // are literally the same sound. So each POSITION in the word gets its own
+  // pair of six-tone banks. Overlapping letters never share a frequency, the
+  // pairing is unambiguous, and LISTEN and SILENT are distinct — while all
+  // the letters still ring at once as a single chord.
+
+  const SLOTS = 5;                       // letters per chord; longer words chunk
+  const F_LO = 400, F_HI = 3600;         // comfortably inside speaker/mic range
+  const NF = SLOTS * 12;
+  const GRID = [...Array(NF)].map((_, i) =>
+    Math.round(F_LO * Math.pow(F_HI / F_LO, i / (NF - 1))));
+
+  // Deal the grid round-robin so each slot's tones are spread across the whole
+  // band rather than stacked in one region — no slot sits where a speaker or
+  // room happens to be weak.
+  const BANKS = [...Array(SLOTS)].map((_, s) => ({
+    rows: [...Array(6)].map((_, i) => GRID[(i * 2) * SLOTS + s]),
+    cols: [...Array(6)].map((_, i) => GRID[(i * 2 + 1) * SLOTS + s])
+  }));
+  const CHORD_F = [];
+  BANKS.forEach(b => CHORD_F.push(...b.rows, ...b.cols));
+  const CHORD_IDX = new Map(CHORD_F.map((f, i) => [f, i]));
+
+  // Split a message into the chords that will be sounded: one per word, with
+  // words longer than SLOTS broken into consecutive chunks.
+  function chordsOf(msg) {
+    const out = [];
+    for (const word of msg.toUpperCase().split(/\s+/).filter(Boolean)) {
+      const clean = [...word].filter(c => CHARS.includes(c)).join("");
+      if (!clean) continue;
+      for (let i = 0; i < clean.length; i += SLOTS) out.push(clean.slice(i, i + SLOTS));
+    }
+    return out;
+  }
+
   const $ = id => document.getElementById(id);
+  const mode = () => document.querySelector('input[name="mode"]:checked').value;
 
   // ---- audio context (created on first gesture) --------------------------
 
@@ -644,6 +787,41 @@
     });
   }
 
+  // Sound a whole word at once. Every letter's two tones start and stop
+  // together, so the ear receives one composite chord rather than a sequence.
+  function chord(txt, at, dur) {
+    const a = audio(), outBus = bus();
+    const RAMP = 0.02;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.5, at + RAMP);
+    g.gain.setValueAtTime(0.5, at + Math.max(RAMP, dur - RAMP));
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    g.connect(outBus);
+
+    // Keep total power steady regardless of word length, so a five-letter
+    // chord is not five times louder than a single letter.
+    const scale = 1 / Math.sqrt(Math.max(1, txt.length));
+
+    [...txt].forEach((ch, i) => {
+      const k = CHARS.indexOf(ch);
+      if (k < 0 || i >= SLOTS) return;
+      const per = a.createGain();
+      per.gain.value = scale;
+      per.connect(g);
+      [BANKS[i].rows[Math.floor(k / 6)], BANKS[i].cols[k % 6]].forEach(f => {
+        const o = a.createOscillator();
+        o.type = "sine";
+        o.frequency.value = f;
+        o.connect(per);
+        o.start(at);
+        o.stop(at + dur + 0.02);
+        live.add(o);
+        o.onended = () => live.delete(o);
+      });
+    });
+  }
+
   // ---- transmit ----------------------------------------------------------
 
   let timers = [];
@@ -675,18 +853,37 @@
     let t = a.currentTime + 0.08;
     let scheduled = 0;
 
-    for (const ch of text) {
-      if (!toPair.has(ch)) {           // space / punctuation -> silence
-        t += symbol + gap;
-        continue;
-      }
-      const [r, c] = toPair.get(ch);
-      tone(ROWS[r], COLS[c], t, symbol);
+    if (mode() === "chord") {
+      // One chord per word. The chord must ring long enough for the receiver
+      // to resolve tones only ~15 Hz apart, so it ignores the rate slider's
+      // fastest settings and holds a floor of 380 ms.
+      const hold = Math.max(0.38, symbol * 2);
+      const rest = hold * 0.6;
 
-      const delay = (t - a.currentTime) * 1000;
-      timers.push(setTimeout(() => flash(ch, symbol * 1000), delay));
-      t += symbol + gap;
-      scheduled++;
+      for (const word of chordsOf(text)) {
+        chord(word, t, hold);
+        const delay = (t - a.currentTime) * 1000;
+        timers.push(setTimeout(() => {
+          [...word].forEach(ch => flash(ch, hold * 1000));
+          $("enc-note").textContent = "Sounding “" + word + "”";
+        }, delay));
+        t += hold + rest;
+        scheduled++;
+      }
+    } else {
+      for (const ch of text) {
+        if (!toPair.has(ch)) {           // space / punctuation -> silence
+          t += symbol + gap;
+          continue;
+        }
+        const [r, c] = toPair.get(ch);
+        tone(ROWS[r], COLS[c], t, symbol);
+
+        const delay = (t - a.currentTime) * 1000;
+        timers.push(setTimeout(() => flash(ch, symbol * 1000), delay));
+        t += symbol + gap;
+        scheduled++;
+      }
     }
 
     if (!scheduled) {
@@ -697,6 +894,9 @@
     setSending(true);
     timers.push(setTimeout(stopAll, (t - a.currentTime) * 1000 + 120));
   });
+
+  document.querySelectorAll('input[name="mode"]').forEach(r =>
+    r.addEventListener("change", () => { stopAll(); resetRx(); }));
 
   $("stop").addEventListener("click", stopAll);
 
@@ -826,6 +1026,10 @@
     lastChar = null; runLen = 0; emittedThis = false;
     sil = 0; blip = 0; toneRun = 0;
     gaps = []; syms = [];
+    if (typeof cring !== "undefined") {
+      cring.fill(0);
+      cfill = 0; cLoud = 0; cQuiet = 0; cArmed = false; cPeak = 0;
+    }
   }
 
   // A silence just ended. Was it the gap between two characters, or a word
@@ -920,6 +1124,87 @@
     }
   }
 
+  // ---- receive: whole-word chords ---------------------------------------
+  //
+  // A chord is read in one shot rather than tracked over time: each slot picks
+  // its loudest row and column tone, and a slot counts as occupied only if it
+  // carries a real share of the chord's energy. Occupancy is judged relative
+  // to the loudest slot, never against an absolute floor — on a clean signal
+  // empty slots sit near zero, and any ratio against zero explodes.
+
+  const CWIN = 8192;                     // 171 ms: enough to resolve ~15 Hz
+  const CHANN = new Float32Array(CWIN);
+  for (let i = 0; i < CWIN; i++) CHANN[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (CWIN - 1));
+
+  const cring = new Float32Array(CWIN);  // sliding history of input
+  let cfill = 0;                          // samples seen since listening began
+  let cLoud = 0, cQuiet = 0, cArmed = false, cPeak = 0;
+
+  function decodeChordAt(buf) {
+    const w = new Float32Array(CWIN);
+    for (let i = 0; i < CWIN; i++) w[i] = buf[i] * CHANN[i];
+    const e = CHORD_F.map(f => goertzel(w, ac.sampleRate, f));
+
+    const slot = [];
+    for (let s = 0; s < SLOTS; s++) {
+      const rE = BANKS[s].rows.map(f => e[CHORD_IDX.get(f)]);
+      const cE = BANKS[s].cols.map(f => e[CHORD_IDX.get(f)]);
+      let ri = 0, ci = 0;
+      for (let i = 1; i < 6; i++) {
+        if (rE[i] > rE[ri]) ri = i;
+        if (cE[i] > cE[ci]) ci = i;
+      }
+      const rSib = [...rE].sort((a, b) => b - a)[1] || 0;
+      const cSib = [...cE].sort((a, b) => b - a)[1] || 0;
+      slot.push({
+        ch: CHARS[ri * 6 + ci],
+        power: Math.min(rE[ri], cE[ci]),
+        contrast: Math.min(rE[ri] / (rSib || 1e-30), cE[ci] / (cSib || 1e-30))
+      });
+    }
+    const peak = Math.max(...slot.map(x => x.power)) || 1e-30;
+    let txt = "";
+    for (let s = 0; s < SLOTS; s++) {
+      if (slot[s].power / peak < 0.06 || slot[s].contrast < 3) break;
+      txt += slot[s].ch;
+    }
+    return txt;
+  }
+
+  // Feed samples in; decode each sustained chord once, when it ends.
+  function analyseChord(chunkBuf) {
+    const n = chunkBuf.length;
+    cring.copyWithin(0, n);
+    cring.set(chunkBuf, CWIN - n);
+    cfill += n;
+
+    let rms = 0;
+    for (let i = 0; i < n; i++) rms += chunkBuf[i] * chunkBuf[i];
+    rms = Math.sqrt(rms / n);
+
+    cPeak = Math.max(cPeak * 0.995, rms);       // slowly-decaying loudness ref
+    const gate = Math.max(cPeak * 0.35, 5e-4);
+
+    if (rms >= gate) {
+      cLoud++; cQuiet = 0;
+      // Arm once the window holds a full chord's worth of this tone.
+      if (cLoud * n >= CWIN && cfill >= CWIN) cArmed = true;
+    } else {
+      cQuiet++;
+      // Chord just ended: decode the window, which still holds its sustain.
+      if (cArmed && cQuiet * n >= CWIN * 0.25) {
+        const txt = decodeChordAt(cring);
+        if (txt) {
+          out += (out ? " " : "") + txt;
+          [...txt].forEach(ch => flash(ch, 220));
+          render();
+        }
+        cArmed = false;
+      }
+      if (cQuiet * n > CWIN * 2) cLoud = 0;
+    }
+  }
+
   async function startListening() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -948,9 +1233,13 @@
     node.onaudioprocess = ev => {
       if (!listening) return;
       ev.inputBuffer.copyFromChannel(chunk, 0);
-      win.copyWithin(0, HOP);          // drop oldest half
-      win.set(chunk, WIN - HOP);       // append newest
-      analyse(win, a.sampleRate);
+      if (mode() === "chord") {
+        analyseChord(chunk);
+      } else {
+        win.copyWithin(0, HOP);        // drop oldest half
+        win.set(chunk, WIN - HOP);     // append newest
+        analyse(win, a.sampleRate);
+      }
     };
 
     mic.connect(node);

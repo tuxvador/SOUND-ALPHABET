@@ -2,10 +2,16 @@
 
 An alphabet where every character is a sound rather than a glyph.
 
-Each of the 36 characters (A–Z, 0–9) is a **chord of two pure tones** — one from a
-row bank, one from a column bank, sounded together. It is the DTMF principle behind
-touch-tone dialing, extended from 16 symbols to 36. Type a message to hear it; play
-it back at the microphone to decode it out of the air.
+Each of the 36 characters (A–Z, 0–9) is a pair of pure tones. There are two ways to
+sound a message:
+
+- **Whole word** — every letter of a word sounds *at once*, as a single chord. A
+  word is one sound, not a string of beeps.
+- **Letter by letter** — each character sounds in turn, spelled out. This is the
+  DTMF principle behind touch-tone dialing, widened from 16 symbols to 36.
+
+Both are decodable: type a message to hear it, then play it back at the microphone
+to recover the text out of the air.
 
 ## Run it
 
@@ -48,6 +54,34 @@ non-zero on failure.
 
 ## How it works
 
+### Whole-word chords
+
+Sounding a word's letters simultaneously is ambiguous if they all draw on the same
+two banks: five letters put five row tones and five column tones in the air at once,
+pairable 25 ways — and `LISTEN` and `SILENT` would be *the same sound*.
+
+So **each position in the word gets its own pair of banks**. The first letter draws
+from one set of twelve frequencies, the second from a different twelve, across five
+slots — 60 distinct tones spanning 400–3600 Hz. No two positions share a frequency,
+so overlapping letters never compete: the pairing is unambiguous, order survives, and
+anagrams differ. Every letter rings for the full duration, so it is heard as one chord.
+
+| | |
+|---|---|
+| Slots | 5 letters per chord (longer words chunk) |
+| Banks | 60 tones, 400–3600 Hz, 12 per slot |
+| Spacing | ≥ 15 Hz (2.6 bins at the analysis window) |
+| Chord length | ≥ 380 ms |
+| Analysis | 8192 samples, Hann-windowed, read once per chord |
+| Slot occupied | ≥ 6% of the loudest slot, and 3× its own band |
+
+Occupancy is judged *relative to the loudest slot* rather than an absolute floor. On
+a clean signal an empty slot sits near zero, and any ratio taken against zero
+explodes — an absolute threshold makes the decoder fail on perfect input while
+working on noisy input.
+
+### Letter by letter
+
 | | |
 |---|---|
 | Row bank | 697 · 770 · 852 · 941 · 1041 · 1141 Hz |
@@ -84,7 +118,8 @@ against.
 ```
 public/index.html      the whole app: encoder, decoder, UI
 server.js              static server, no dependencies
-test/decoder.test.js   codec tests, run against public/index.html
+test/chord.test.js     whole-word chord codec
+test/decoder.test.js   letter-by-letter codec
 ```
 
 The decoder is tested by extracting it from the shipped HTML rather than from a
