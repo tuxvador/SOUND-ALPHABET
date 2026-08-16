@@ -827,6 +827,11 @@
   let timers = [];
   let sending = false;
 
+  // Declared before stopAll, which clears them.
+  let queue = [];                        // remaining items to sound
+  let qNext = 0;                         // when the next item starts
+  let pump = null;                       // refill interval
+
   function setSending(on) {
     sending = on;
     $("play").disabled = on;
@@ -835,12 +840,56 @@
   }
 
   function stopAll() {
+    if (pump !== null) { clearInterval(pump); pump = null; }
+    queue = [];
     timers.forEach(clearTimeout);
     timers = [];
     live.forEach(o => { try { o.stop(); } catch (e) {} });
     live.clear();
     document.querySelectorAll(".cell.lit").forEach(el => el.classList.remove("lit"));
     setSending(false);
+  }
+
+  // A message is scheduled in a rolling window rather than all at once.
+  // Scheduling everything up front means one oscillator pair per symbol alive
+  // simultaneously — a few thousand nodes for a long message — which exhausts
+  // the audio context and cuts playback off partway through. Instead we keep
+  // only the next LOOKAHEAD seconds queued and refill as it drains, so node
+  // count stays flat no matter how long the message is.
+
+  const LOOKAHEAD = 2.0;                 // seconds of audio queued ahead
+  const TICK = 250;                      // ms between refills
+
+  function refill() {
+    const a = audio();
+    const horizon = a.currentTime + LOOKAHEAD;
+
+    while (queue.length && qNext < horizon) {
+      const item = queue.shift();
+      if (item.kind === "chord") {
+        chord(item.txt, qNext, item.dur);
+      } else if (item.kind === "tone") {
+        tone(item.f1, item.f2, qNext, item.dur);
+      }
+      if (item.txt) {
+        const at = qNext, label = item.txt, ms = item.dur * 1000;
+        const delay = Math.max(0, (at - a.currentTime) * 1000);
+        timers.push(setTimeout(() => {
+          [...label].forEach(c => flash(c, ms));
+          if (sending) {
+            $("enc-note").textContent = queue.length
+              ? "Sounding “" + label + "” · " + queue.length + " left"
+              : "Sounding “" + label + "”";
+          }
+        }, delay));
+      }
+      qNext += item.dur + item.rest;
+    }
+
+    // Everything queued has been scheduled and played out.
+    if (!queue.length && a.currentTime > qNext + 0.15) {
+      stopAll();                         // clears the pump and the queue
+    }
   }
 
   $("play").addEventListener("click", () => {
@@ -850,8 +899,7 @@
     const symbol = +$("rate").value / 1000;
     const gap = symbol * 0.4;
 
-    let t = a.currentTime + 0.08;
-    let scheduled = 0;
+    queue = [];
 
     if (mode() === "chord") {
       // One chord per word. The chord must ring long enough for the receiver
@@ -859,40 +907,30 @@
       // fastest settings and holds a floor of 380 ms.
       const hold = Math.max(0.38, symbol * 2);
       const rest = hold * 0.6;
-
       for (const word of chordsOf(text)) {
-        chord(word, t, hold);
-        const delay = (t - a.currentTime) * 1000;
-        timers.push(setTimeout(() => {
-          [...word].forEach(ch => flash(ch, hold * 1000));
-          $("enc-note").textContent = "Sounding “" + word + "”";
-        }, delay));
-        t += hold + rest;
-        scheduled++;
+        queue.push({ kind: "chord", txt: word, dur: hold, rest });
       }
     } else {
       for (const ch of text) {
         if (!toPair.has(ch)) {           // space / punctuation -> silence
-          t += symbol + gap;
+          queue.push({ kind: "rest", dur: 0, rest: symbol + gap });
           continue;
         }
         const [r, c] = toPair.get(ch);
-        tone(ROWS[r], COLS[c], t, symbol);
-
-        const delay = (t - a.currentTime) * 1000;
-        timers.push(setTimeout(() => flash(ch, symbol * 1000), delay));
-        t += symbol + gap;
-        scheduled++;
+        queue.push({ kind: "tone", txt: ch, f1: ROWS[r], f2: COLS[c], dur: symbol, rest: gap });
       }
     }
 
-    if (!scheduled) {
+    if (!queue.some(i => i.kind !== "rest")) {
+      queue = [];
       $("enc-note").textContent = "Nothing to send — letters and digits only";
       return;
     }
 
+    qNext = a.currentTime + 0.12;
     setSending(true);
-    timers.push(setTimeout(stopAll, (t - a.currentTime) * 1000 + 120));
+    refill();                            // prime the first window
+    pump = setInterval(refill, TICK);
   });
 
   document.querySelectorAll('input[name="mode"]').forEach(r =>
