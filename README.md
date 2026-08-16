@@ -72,6 +72,7 @@ and anagrams still differ.
 | Slots | 3 letters per chord (longer words chunk) |
 | Registers | 9 notes each, non-overlapping |
 | Letter | a pair of notes; the interval carries it |
+| Accent | a third note at 45% level |
 | Timbre | triangle wave |
 | Spacing | ≥ 22 Hz (3.8 bins at the analysis window) |
 | Chord length | ≥ 380 ms |
@@ -81,6 +82,41 @@ and anagrams still differ.
 The scale is deliberately gapped: its notes sit far enough apart to be separable at
 the analysis window. A denser scale sounds richer and decodes worse — that trade is
 what fixes the note count at 27, and so the slots at 3.
+
+### Accents and languages
+
+Supported: **English, French, Spanish, Portuguese, Italian, German, Swedish.**
+
+Accented letters get no symbols of their own — there are exactly 36 pairs and no
+spare, and widening the register to fit ~91 precomposed characters would need 14
+notes per slot, collapsing the chord to a single letter.
+
+Instead a letter decomposes (Unicode NFD) into an ASCII base plus a combining mark:
+`É` is `E` + acute. The base uses its usual pair; the **mark rides on a third note**
+from the same register, sounded at 45% level. Power scales as amplitude², so the
+accent lands at ~20% of the pair's power — unmistakably present, but never loud
+enough to be read as part of the letter. The decoder takes the two loudest notes as
+the letter and a clear third as its accent.
+
+Seven marks cover all seven languages:
+
+| Mark | Letters |
+|---|---|
+| acute | á é í ó ú ý |
+| grave | à è ì ò ù |
+| circumflex | â ê î ô û |
+| diaeresis | ä ë ï ö ü ÿ |
+| cedilla | ç |
+| tilde | ã ñ õ |
+| ring | å |
+
+Ligatures and letters with no combining form are spelled out at input instead:
+`Œ → OE`, `Æ → AE`, `ß → SS`. So `Straße` sounds as `STRASSE`.
+
+Adding a language means adding its marks to `MARKS` in
+[public/index.html](public/index.html) — there is room for one more (8 states, 7
+used). Czech and Polish need caron, ogonek, and stroke, which exceeds that budget;
+supporting them would require a wider register and fewer letters per chord.
 
 Occupancy is judged *relative to the loudest slot* rather than an absolute floor. On
 a clean signal an empty slot sits near zero, and any ratio taken against zero

@@ -21,11 +21,24 @@ for(let m=48;m<=105&&SCALE_NOTES.length<SLOTS*PER;m++){
 const BANKS=[...Array(SLOTS)].map((_,s)=>SCALE_NOTES.slice(s*PER,(s+1)*PER).map(midiHz));
 const PAIRS=[];for(let i=0;i<PER;i++)for(let j=i+1;j<PER;j++)PAIRS.push([i,j]);
 const CHORD_F=[];BANKS.forEach(b=>CHORD_F.push(...b));
+const EXPAND=eval('('+html.match(/const EXPAND = (\{[^}]*\});/)[1]+')');
+const ACC_LEVEL=Number(html.match(/const ACC_LEVEL = ([\d.]+)/)[1]);
+const ACC_MIN=ACC_LEVEL*ACC_LEVEL/4;
+const ACC_SEP=Number(html.match(/const ACC_SEP = (\d+)/)[1]);
+const CONTRAST_MIN=Number(html.match(/const CONTRAST_MIN = (\d+)/)[1]);
+const MARKS=eval(html.match(/const MARKS = (\[[\s\S]*?\]);/)[1].replace(/\/\/[^\n]*/g,''));
+{ // accent helpers, rewritten so eval's consts survive
+  const lines=html.split('\n');
+  const a=lines.findIndex(l=>l.includes('const freeNotes ='));
+  const b=lines.findIndex((l,i)=>i>a&&l.includes('const accentIndex ='));
+  eval(lines.slice(a,b+1).join('\n').replace(/\bconst /g,'globalThis.'));
+}
 const SR=48000, ac={sampleRate:SR};
 const CHANN=new Float32Array(CWIN);
 for(let i=0;i<CWIN;i++)CHANN[i]=0.5-0.5*Math.cos(2*Math.PI*i/(CWIN-1));
 eval(grab('function goertzel(buf, sampleRate, freq)'));
 eval(grab('function decodeChordAt(buf)'));
+eval(grab('function decompose(ch)'));
 eval(grab('function chordsOf(msg)'));
 
 const NAME=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];

@@ -443,9 +443,10 @@
     <h1>An alphabet you <em>hear</em>, not read</h1>
     <p class="standfirst">
       Every character is a pair of notes drawn from a single scale, so a whole word sounds
-      <strong>all at once</strong> as one chord in a key — not a string of beeps. And it
-      still decodes: type a message to hear it, then play it at the microphone and watch it
-      reassemble out of the air.
+      <strong>all at once</strong> as one chord in a key — not a string of beeps. Accented
+      letters carry a third, quieter note, so <strong>café</strong> and
+      <strong>niño</strong> keep their marks. And it still decodes: type a message to hear
+      it, then play it at the microphone and watch it reassemble out of the air.
     </p>
   </header>
 
@@ -458,7 +459,7 @@
     <div class="panel-body">
       <label class="field">
         <span class="field-label">Message</span>
-        <textarea id="msg" rows="2" spellcheck="false">HELLO WORLD</textarea>
+        <textarea id="msg" rows="2" spellcheck="false">CAFÉ NOËL EL NIÑO</textarea>
       </label>
 
       <fieldset class="modes">
@@ -555,6 +556,17 @@
           scale would sound richer and decode worse; this is the trade that keeps the chord
           both musical and readable.
         </p>
+        <p>
+          <strong>Accents</strong> get no symbols of their own — there are exactly
+          thirty-six pairs and no spare. Instead an accented letter splits into its plain
+          base and its mark: <strong>É</strong> is <strong>E</strong> plus an acute. The base
+          uses its usual pair, and the mark is carried by a <em>third</em> note from the same
+          register, sounded at 45% level. Since power falls with the square of amplitude,
+          that note lands at about a fifth of the pair's — unmistakably present, yet never
+          loud enough to be mistaken for part of the letter. Seven marks cover French,
+          Spanish, Portuguese, Italian, German and Swedish; ligatures like
+          <strong>Œ</strong> and <strong>ß</strong> spell themselves out as OE and SS.
+        </p>
       </div>
     </div>
   </section>
@@ -612,6 +624,8 @@
           <tr><td>Slots</td><td class="v">3 letters per chord</td><td>Longer words split into consecutive chords</td></tr>
           <tr><td>Registers</td><td class="v">9 notes each, non-overlapping</td><td>C(9,2) = 36 pairs, exactly one per character</td></tr>
           <tr><td>Letter</td><td class="v">A pair of notes</td><td>The interval carries the character</td></tr>
+          <tr><td>Accent</td><td class="v">A third note at 45% level</td><td>7 marks: acute, grave, circumflex, diaeresis, cedilla, tilde, ring</td></tr>
+          <tr><td>Languages</td><td class="v">EN · FR · ES · PT · IT · DE · SV</td><td>Ligatures Œ Æ ß spell out as OE AE SS</td></tr>
           <tr><td>Timbre</td><td class="v">Triangle wave</td><td>Body without harmonics that mask a neighbour</td></tr>
           <tr><td>Note spacing</td><td class="v">≥ 22 Hz (3.8 bins)</td><td>Resolvable in an 8192-sample window</td></tr>
           <tr><td>Chord length</td><td class="v">≥ 380 ms</td><td>Long enough to resolve 15 Hz apart</td></tr>
@@ -682,6 +696,62 @@
   const PAIRS = [];
   for (let i = 0; i < PER; i++) for (let j = i + 1; j < PER; j++) PAIRS.push([i, j]);
 
+  // ---- accents -----------------------------------------------------------
+  //
+  // Accented letters are not given symbols of their own — there aren't enough
+  // note pairs, and adding them would shrink the chord to a single letter.
+  // Instead a letter decomposes (Unicode NFD) into an ASCII base plus a
+  // combining mark, the base uses the pair above, and the mark is carried by a
+  // THIRD note from the same register, sounded quieter. The decoder reads the
+  // two loudest notes as the letter and a clear third as its accent.
+  //
+  // These seven marks cover French, Spanish, Portuguese, Italian, German and
+  // Swedish. Index 0 is "no accent", so eight states fit the seven free notes
+  // that remain once a pair is chosen.
+  const MARKS = [
+    "",         // none
+    "́",   // acute      é á ó
+    "̀",   // grave      è à ù
+    "̂",   // circumflex ê â î ô û
+    "̈",   // diaeresis  ë ï ü ö ä
+    "̧",   // cedilla    ç
+    "̃",   // tilde      ñ ã õ
+    "̊"    // ring       å
+  ];
+  const ACC_LEVEL = 0.45;                // accent note sits below the pair
+  // Power scales as amplitude², so a real accent lands near ACC_LEVEL² ≈ 0.20
+  // of the pair. Take a quarter of that as the bar: far above the noise floor
+  // (which sits ~10⁻⁵ of the pair) yet far below a genuine accent.
+  const ACC_MIN = ACC_LEVEL * ACC_LEVEL / 4;
+  // A real accent also stands clear of the note below it. Under white noise that
+  // ratio hovers near 1.3; a sounded accent puts it in the thousands, so a
+  // modest bar separates them without discarding accents in a noisy room.
+  const ACC_SEP = 4;
+  const CONTRAST_MIN = 10;   // pair vs the note beneath it
+
+  // Ligatures and letters with no combining form are spelled out instead.
+  const EXPAND = { "Æ": "AE", "Œ": "OE", "ß": "SS", "SS": "SS" };
+
+  // "É" -> ["E", 1]. Returns null for anything outside the alphabet.
+  function decompose(ch) {
+    const d = ch.normalize("NFD");
+    const base = d[0].toUpperCase();
+    const mark = d.slice(1).replace(/[^̀-ͯ]/g, "");
+    const mi = MARKS.indexOf(mark);
+    if (CHARS.includes(base) && mi >= 0) return [base, mi];
+    return null;
+  }
+
+  // Which register note carries mark `mi`, given the pair the letter used.
+  const freeNotes = (lo, hi) => {
+    const free = [];
+    for (let i = 0; i < PER; i++) if (i !== lo && i !== hi) free.push(i);
+    return free;
+  };
+  const accentNote = (lo, hi, mi) => freeNotes(lo, hi)[mi - 1];
+  // …and back again: which mark does a heard third note stand for?
+  const accentIndex = (lo, hi, note) => freeNotes(lo, hi).indexOf(note) + 1;
+
   const CHORD_F = [];
   BANKS.forEach(b => CHORD_F.push(...b));
 
@@ -690,9 +760,14 @@
   function chordsOf(msg) {
     const out = [];
     for (const word of msg.toUpperCase().split(/\s+/).filter(Boolean)) {
-      const clean = [...word].filter(c => CHARS.includes(c)).join("");
-      if (!clean) continue;
-      for (let i = 0; i < clean.length; i += SLOTS) out.push(clean.slice(i, i + SLOTS));
+      // Expand ligatures first, then keep anything that decomposes to a
+      // known base letter — accented or not.
+      const expanded = [...word].map(c => EXPAND[c] || c).join("");
+      const clean = [...expanded].filter(c => decompose(c) !== null);
+      if (!clean.length) continue;
+      for (let i = 0; i < clean.length; i += SLOTS) {
+        out.push(clean.slice(i, i + SLOTS).join(""));
+      }
     }
     return out;
   }
@@ -823,13 +898,22 @@
     const scale = 1 / Math.sqrt(Math.max(1, txt.length));
 
     [...txt].forEach((ch, i) => {
-      const k = CHARS.indexOf(ch);
-      if (k < 0 || i >= SLOTS) return;
-      const per = a.createGain();
-      per.gain.value = scale;
-      per.connect(g);
+      if (i >= SLOTS) return;
+      const dec = decompose(ch);
+      if (!dec) return;
+      const [base, mi] = dec;
+      const k = CHARS.indexOf(base);
+      if (k < 0) return;
+
       const [lo, hi] = PAIRS[k];
-      [BANKS[i][lo], BANKS[i][hi]].forEach(f => {
+      const voices = [[BANKS[i][lo], 1], [BANKS[i][hi], 1]];
+      // The accent rides along quieter, so the pair still reads as the letter.
+      if (mi > 0) voices.push([BANKS[i][accentNote(lo, hi, mi)], ACC_LEVEL]);
+
+      voices.forEach(([f, amp]) => {
+        const per = a.createGain();
+        per.gain.value = scale * amp;
+        per.connect(g);
         // A triangle wave gives the note a little body — its harmonics fall
         // away fast enough (1/n²) that they never mask a neighbouring note.
         const o = a.createOscillator();
@@ -1213,17 +1297,44 @@
       const rank = mine.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
       const [lo, hi] = [rank[0][1], rank[1][1]].sort((a, b) => a - b);
       const k = PAIRS.findIndex(([x, y]) => x === lo && y === hi);
+
+      // Decide whether this register holds a real chord BEFORE looking for an
+      // accent. Under white noise all nine notes are comparable, so the third
+      // note sits at ~0.8 of the second by chance — well over ACC_MIN. Letting
+      // that trip the accent branch would relax the very gate meant to reject
+      // noise, so the two tests must not depend on each other.
+      //
+      // A genuine accent is the only thing that can lift the third note far
+      // above the fourth: sounded at ACC_LEVEL, it lands near ACC_LEVEL² of the
+      // pair in power, while everything below a real pair is noise.
+      const r3 = rank[2] ? rank[2][0] : 0;
+      const r4 = rank[3] ? rank[3][0] : 0;
+      const accented = r3 / (rank[1][0] || 1e-30) > ACC_MIN &&
+                       r3 / (r4 || 1e-30) > ACC_SEP;
+
+      // The pair must tower over whatever lies beneath it. That floor is the
+      // third note normally, or the fourth when the third is a real accent.
+      const floor = accented ? r4 : r3;
+
+      let ch = k >= 0 ? CHARS[k] : "";
+      if (ch && accented) {
+        const ai = accentIndex(lo, hi, rank[2][1]);
+        if (ai > 0 && ai < MARKS.length) ch = (ch + MARKS[ai]).normalize("NFC");
+      }
+
       slot.push({
-        ch: k >= 0 ? CHARS[k] : "",
+        ch,
         power: Math.min(rank[0][0], rank[1][0]),
-        // The second real note must stand clear of the loudest non-note.
-        contrast: rank[1][0] / (rank[2][0] || 1e-30)
+        contrast: rank[1][0] / (floor || 1e-30)
       });
     }
     const peak = Math.max(...slot.map(x => x.power)) || 1e-30;
     let txt = "";
     for (let s = 0; s < SLOTS; s++) {
-      if (!slot[s].ch || slot[s].power / peak < 0.06 || slot[s].contrast < 2.5) break;
+      // A real pair towers over the noise beneath it — contrast runs to ~10⁴ for a
+      // sounded chord, while pure noise reaches 2.5 about 5% of the time and never
+      // reaches 10. The bar sits far above noise yet far below any real signal.
+      if (!slot[s].ch || slot[s].power / peak < 0.06 || slot[s].contrast < CONTRAST_MIN) break;
       txt += slot[s].ch;
     }
     return txt;
