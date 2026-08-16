@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tonescript</title>
+<meta name="description" content="A 36-character alphabet where every letter is a pair of tones.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#128266;</text></svg>">
+<style>
+  /* minimal reset — the artifact host supplies one; standalone must not rely on it */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, canvas { max-width: 100%; }
+  button, input, textarea { font: inherit; color: inherit; }
+</style>
+<style>
+  :root {
+    --ground:      #0E1418;
+    --panel:       #161F25;
+    --panel-hi:    #1D2A32;
+    --line:        #26353E;
+    --trace:       #5FE3C0;
+    --trace-dim:   #2F7D6C;
+    --row-tone:    #E8B04B;
+    --col-tone:    #6FA8E8;
+    --ink:         #DCE8ED;
+    --ink-mid:     #8FA3AD;
+    --ink-low:     #5C6F79;
+    --warn:        #E8734B;
+
+    --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: "Helvetica Neue", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+    --s5: 24px; --s6: 32px; --s7: 48px; --s8: 72px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--s7) var(--s5) var(--s8);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s7);
+  }
+
+  /* ---------- masthead ---------- */
+
+  header { display: flex; flex-direction: column; gap: var(--s4); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--trace-dim);
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(38px, 7vw, 68px);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--trace);
+  }
+
+  .standfirst {
+    max-width: 62ch;
+    color: var(--ink-mid);
+    font-size: 16px;
+    margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- panels ---------- */
+
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s4);
+    padding: var(--s4) var(--s5);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+
+  .panel-head h2 {
+    font-size: 13px;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .panel-note {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-low);
+    letter-spacing: 0.04em;
+  }
+
+  .panel-body {
+    padding: var(--s5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s5);
+  }
+
+  /* ---------- controls ---------- */
+
+  label.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+  }
+
+  .field-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+  }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    color: var(--trace);
+    font-family: var(--mono);
+    font-size: 17px;
+    letter-spacing: 0.08em;
+    padding: var(--s3) var(--s4);
+    resize: vertical;
+  }
+  textarea:focus-visible, input:focus-visible {
+    outline: 2px solid var(--trace);
+    outline-offset: 1px;
+  }
+
+  .row {
+    display: flex;
+    gap: var(--s3);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 10px var(--s4);
+    border-radius: 2px;
+    border: 1px solid var(--line);
+    background: var(--panel-hi);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  button:hover:not(:disabled) { border-color: var(--trace-dim); color: var(--trace); }
+  button:focus-visible { outline: 2px solid var(--trace); outline-offset: 2px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  button.primary {
+    background: var(--trace);
+    border-color: var(--trace);
+    color: #06110D;
+    font-weight: 700;
+  }
+  button.primary:hover:not(:disabled) {
+    background: #7BEDD0;
+    border-color: #7BEDD0;
+    color: #06110D;
+  }
+
+  button.rec[aria-pressed="true"] {
+    background: var(--warn);
+    border-color: var(--warn);
+    color: #1A0A04;
+    font-weight: 700;
+  }
+
+  .slider {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mid);
+    letter-spacing: 0.08em;
+  }
+  input[type="range"] { accent-color: var(--trace); width: 120px; }
+  .slider output { color: var(--trace); font-variant-numeric: tabular-nums; }
+
+  /* ---------- keypad: the alphabet itself ---------- */
+
+  .grid-scroll { overflow-x: auto; }
+
+  table.grid {
+    border-collapse: collapse;
+    font-family: var(--mono);
+    margin: 0 auto;
+  }
+
+  table.grid th {
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-low);
+    padding: var(--s2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  table.grid th.col-h { color: var(--col-tone); }
+  table.grid th.row-h { color: var(--row-tone); text-align: right; padding-right: var(--s3); }
+  table.grid th.corner { color: var(--ink-low); font-size: 10px; }
+
+  .cell {
+    width: 62px;
+    height: 52px;
+    padding: 0;
+    border: 1px solid var(--line);
+    background: var(--panel-hi);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 21px;
+    letter-spacing: 0;
+    text-transform: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: none;
+  }
+  .cell:hover { border-color: var(--trace-dim); color: var(--trace); }
+
+  .cell.lit {
+    background: var(--trace);
+    border-color: var(--trace);
+    color: #06110D;
+    font-weight: 700;
+  }
+
+  /* ---------- scope ---------- */
+
+  .scope-frame {
+    position: relative;
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 190px; }
+
+  .scope-legend {
+    position: absolute;
+    top: var(--s3);
+    left: var(--s4);
+    display: flex;
+    gap: var(--s4);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .key { display: flex; align-items: center; gap: 6px; color: var(--ink-low); }
+  .swatch { width: 9px; height: 3px; border-radius: 1px; }
+
+  /* ---------- readouts ---------- */
+
+  .readout {
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: var(--s4);
+    font-family: var(--mono);
+    font-size: 18px;
+    letter-spacing: 0.12em;
+    color: var(--trace);
+    min-height: 58px;
+    word-break: break-word;
+    display: flex;
+    align-items: center;
+  }
+  .readout.empty { color: var(--ink-low); letter-spacing: 0.04em; font-size: 13px; }
+
+  .status {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-mid);
+    min-height: 17px;
+  }
+  .status.err { color: var(--warn); }
+
+  /* ---------- spec table ---------- */
+
+  .spec-scroll { overflow-x: auto; }
+  table.spec {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.spec th, table.spec td {
+    text-align: left;
+    padding: var(--s2) var(--s3);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  table.spec th {
+    color: var(--ink-low);
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  table.spec td { color: var(--ink-mid); }
+  table.spec td.v { color: var(--ink); }
+
+  .prose { max-width: 66ch; color: var(--ink-mid); font-size: 14px; }
+  .prose p { margin: 0 0 var(--s3); }
+  .prose p:last-child { margin-bottom: 0; }
+  .prose code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--trace);
+    background: var(--ground);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .prose strong { color: var(--ink); font-weight: 600; }
+
+  footer {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-low);
+    letter-spacing: 0.06em;
+    border-top: 1px solid var(--line);
+    padding-top: var(--s4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  @media (max-width: 640px) {
+    .wrap { padding: var(--s6) var(--s4) var(--s7); gap: var(--s6); }
+    .cell { width: 50px; height: 46px; font-size: 18px; }
+    .panel-body { padding: var(--s4); }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Dual-tone symbol set &nbsp;/&nbsp; 36 characters</div>
+    <h1>An alphabet you <em>hear</em>, not read</h1>
+    <p class="standfirst">
+      Every character is a chord: two pure tones sounded together, one from the
+      <strong>row</strong> bank and one from the <strong>column</strong> bank. Thirty-six
+      pairs cover A–Z and 0–9. Type a message to hear it spoken in tones — then play it
+      back at the microphone and watch it decode, letter by letter, out of the air.
+    </p>
+  </header>
+
+  <!-- ============ ENCODER ============ -->
+  <section>
+    <div class="panel-head">
+      <h2>Transmit</h2>
+      <span class="panel-note" id="enc-note">Ready</span>
+    </div>
+    <div class="panel-body">
+      <label class="field">
+        <span class="field-label">Message</span>
+        <textarea id="msg" rows="2" spellcheck="false">HELLO WORLD</textarea>
+      </label>
+
+      <div class="row">
+        <button class="primary" id="play">▶ Transmit</button>
+        <button id="stop" disabled>■ Stop</button>
+        <div class="slider">
+          <label for="rate">Rate</label>
+          <input type="range" id="rate" min="60" max="400" step="10" value="170">
+          <output id="rate-out">170 ms</output>
+        </div>
+        <div class="slider">
+          <label for="vol">Level</label>
+          <input type="range" id="vol" min="0" max="100" step="1" value="55">
+          <output id="vol-out">55%</output>
+        </div>
+      </div>
+
+      <div class="scope-frame">
+        <canvas id="scope"></canvas>
+        <div class="scope-legend">
+          <span class="key"><span class="swatch" style="background:var(--row-tone)"></span>Row bank</span>
+          <span class="key"><span class="swatch" style="background:var(--col-tone)"></span>Column bank</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE ALPHABET ============ -->
+  <section>
+    <div class="panel-head">
+      <h2>The alphabet</h2>
+      <span class="panel-note">Click any character to sound it</span>
+    </div>
+    <div class="panel-body">
+      <div class="grid-scroll">
+        <table class="grid" id="grid"></table>
+      </div>
+      <div class="prose">
+        <p>
+          Read a character's chord off its edges: <strong>W</strong> sits at row 1041 Hz and
+          column 1477 Hz, so <strong>W</strong> is those two frequencies played at once. No
+          frequency in either bank is a whole-number multiple of another, so the distortion
+          harmonics of a real tone never land on top of a different tone — a decoder can't be
+          fooled into hearing a letter that was never sent.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DECODER ============ -->
+  <section>
+    <div class="panel-head">
+      <h2>Receive</h2>
+      <span class="panel-note">Goertzel detection &nbsp;/&nbsp; 12 bins</span>
+    </div>
+    <div class="panel-body">
+      <div class="row">
+        <button class="rec" id="listen" aria-pressed="false">● Listen</button>
+        <button id="clear">Clear</button>
+        <span class="status" id="rec-status"></span>
+      </div>
+      <div class="readout empty" id="decoded">Decoded text appears here.</div>
+      <div class="prose">
+        <p>
+          Play the transmitter aloud through speakers with this listening — the message
+          crosses the room as sound and reassembles itself. The receiver runs twelve
+          <strong>Goertzel</strong> filters, one per frequency in the two banks. Each reports
+          the energy at exactly its own frequency, which is far cheaper than a full spectrum
+          when you already know the only twelve places a tone can hide. The strongest row and
+          the strongest column must both clear the noise floor by a set margin before a
+          character is accepted, so room noise alone never spells anything.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SPEC ============ -->
+  <section>
+    <div class="panel-head">
+      <h2>Specification</h2>
+      <span class="panel-note">Everything needed to build a compatible receiver</span>
+    </div>
+    <div class="panel-body">
+      <div class="spec-scroll">
+        <table class="spec">
+          <tr><th>Parameter</th><th>Value</th><th>Reason</th></tr>
+          <tr><td>Row bank</td><td class="v">697 · 770 · 852 · 941 · 1041 · 1141 Hz</td><td>Low group, non-harmonic spacing</td></tr>
+          <tr><td>Column bank</td><td class="v">1209 · 1336 · 1477 · 1633 · 1789 · 1945 Hz</td><td>High group, clear of the low group</td></tr>
+          <tr><td>Alphabet</td><td class="v">A–Z, 0–9 &nbsp;(36 = 6 × 6)</td><td>One chord per character, no escapes</td></tr>
+          <tr><td>Symbol length</td><td class="v">60–400 ms, default 170</td><td>Long enough for the detector to integrate</td></tr>
+          <tr><td>Inter-symbol gap</td><td class="v">40% of symbol length</td><td>Separates repeated characters</td></tr>
+          <tr><td>Envelope</td><td class="v">8 ms raised-cosine ramps</td><td>Suppresses the click of a hard edge</td></tr>
+          <tr><td>Detection</td><td class="v">Goertzel, 12 bins</td><td>Cheaper than an FFT for known frequencies</td></tr>
+          <tr><td>Analysis window</td><td class="v">1024 samples, 512 hop</td><td>Overlap doubles timing resolution</td></tr>
+          <tr><td>Accept threshold</td><td class="v">6× median bin, both tones</td><td>Rejects speech and room noise</td></tr>
+          <tr><td>Confirmation</td><td class="v">3 consecutive windows</td><td>One noisy window can't invent a letter</td></tr>
+          <tr><td>Word break</td><td class="v">Silence ≥ 2.2× gap, or ≥ 1 symbol</td><td>Learned from the signal; no fixed rate assumed</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>Tonescript · dual-tone alphabet · built in the browser, no network</footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- the alphabet ------------------------------------------------------
+
+  const ROWS = [697, 770, 852, 941, 1041, 1141];
+  const COLS = [1209, 1336, 1477, 1633, 1789, 1945];
+  const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  const toPair = new Map();   // char -> [rowIdx, colIdx]
+  const fromPair = new Map(); // "r,c" -> char
+  CHARS.split("").forEach((ch, i) => {
+    const r = Math.floor(i / 6), c = i % 6;
+    toPair.set(ch, [r, c]);
+    fromPair.set(r + "," + c, ch);
+  });
+
+  const $ = id => document.getElementById(id);
+
+  // ---- audio context (created on first gesture) --------------------------
+
+  let ac = null;
+  const audio = () => {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === "suspended") ac.resume();
+    return ac;
+  };
+
+  // ---- keypad ------------------------------------------------------------
+
+  const grid = $("grid");
+  {
+    const head = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "corner";
+    corner.textContent = "Hz";
+    head.appendChild(corner);
+    COLS.forEach(f => {
+      const th = document.createElement("th");
+      th.className = "col-h";
+      th.scope = "col";
+      th.textContent = f;
+      head.appendChild(th);
+    });
+    grid.appendChild(head);
+
+    ROWS.forEach((rf, r) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.className = "row-h";
+      th.scope = "row";
+      th.textContent = rf;
+      tr.appendChild(th);
+
+      COLS.forEach((cf, c) => {
+        const td = document.createElement("td");
+        const b = document.createElement("button");
+        const ch = fromPair.get(r + "," + c);
+        b.className = "cell";
+        b.textContent = ch;
+        b.id = "cell-" + ch;
+        b.title = ch + " = " + rf + " Hz + " + cf + " Hz";
+        b.setAttribute("aria-label", ch + ", " + rf + " hertz and " + cf + " hertz");
+        b.addEventListener("click", () => {
+          const dur = +$("rate").value / 1000;
+          tone(rf, cf, audio().currentTime, dur);
+          flash(ch, dur * 1000);
+        });
+        td.appendChild(b);
+        tr.appendChild(td);
+      });
+      grid.appendChild(tr);
+    });
+  }
+
+  function flash(ch, ms) {
+    const el = $("cell-" + ch);
+    if (!el) return;
+    el.classList.add("lit");
+    setTimeout(() => el.classList.remove("lit"), Math.max(90, ms));
+  }
+
+  // ---- synthesis ---------------------------------------------------------
+
+  let master = null;
+  function bus() {
+    const a = audio();
+    if (!master) {
+      master = a.createGain();
+      master.connect(a.destination);
+      analyser = a.createAnalyser();
+      analyser.fftSize = 4096;
+      analyser.smoothingTimeConstant = 0.55;
+      master.connect(analyser);
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+    }
+    master.gain.value = +$("vol").value / 100 * 0.5;
+    return master;
+  }
+
+  let analyser = null, freqData = null;
+  const live = new Set(); // oscillators currently scheduled
+
+  function tone(f1, f2, at, dur) {
+    const a = audio(), out = bus();
+    const RAMP = 0.008;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.5, at + RAMP);
+    g.gain.setValueAtTime(0.5, at + Math.max(RAMP, dur - RAMP));
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    g.connect(out);
+
+    [f1, f2].forEach(f => {
+      const o = a.createOscillator();
+      o.type = "sine";
+      o.frequency.value = f;
+      o.connect(g);
+      o.start(at);
+      o.stop(at + dur + 0.02);
+      live.add(o);
+      o.onended = () => live.delete(o);
+    });
+  }
+
+  // ---- transmit ----------------------------------------------------------
+
+  let timers = [];
+  let sending = false;
+
+  function setSending(on) {
+    sending = on;
+    $("play").disabled = on;
+    $("stop").disabled = !on;
+    $("enc-note").textContent = on ? "Transmitting…" : "Ready";
+  }
+
+  function stopAll() {
+    timers.forEach(clearTimeout);
+    timers = [];
+    live.forEach(o => { try { o.stop(); } catch (e) {} });
+    live.clear();
+    document.querySelectorAll(".cell.lit").forEach(el => el.classList.remove("lit"));
+    setSending(false);
+  }
+
+  $("play").addEventListener("click", () => {
+    stopAll();
+    const a = audio();
+    const text = $("msg").value.toUpperCase();
+    const symbol = +$("rate").value / 1000;
+    const gap = symbol * 0.4;
+
+    let t = a.currentTime + 0.08;
+    let scheduled = 0;
+
+    for (const ch of text) {
+      if (!toPair.has(ch)) {           // space / punctuation -> silence
+        t += symbol + gap;
+        continue;
+      }
+      const [r, c] = toPair.get(ch);
+      tone(ROWS[r], COLS[c], t, symbol);
+
+      const delay = (t - a.currentTime) * 1000;
+      timers.push(setTimeout(() => flash(ch, symbol * 1000), delay));
+      t += symbol + gap;
+      scheduled++;
+    }
+
+    if (!scheduled) {
+      $("enc-note").textContent = "Nothing to send — letters and digits only";
+      return;
+    }
+
+    setSending(true);
+    timers.push(setTimeout(stopAll, (t - a.currentTime) * 1000 + 120));
+  });
+
+  $("stop").addEventListener("click", stopAll);
+
+  $("rate").addEventListener("input", e => $("rate-out").textContent = e.target.value + " ms");
+  $("vol").addEventListener("input", e => {
+    $("vol-out").textContent = e.target.value + "%";
+    if (master) master.gain.value = +e.target.value / 100 * 0.5;
+  });
+
+  // ---- scope -------------------------------------------------------------
+
+  const cv = $("scope"), ctx = cv.getContext("2d");
+
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, r.width * dpr);
+    cv.height = Math.max(1, r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  fit();
+  window.addEventListener("resize", fit);
+
+  const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+  function draw() {
+    requestAnimationFrame(draw);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = css("--ground");
+    ctx.fillRect(0, 0, w, h);
+
+    // baseline grid
+    ctx.strokeStyle = css("--line");
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const y = (h / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(w, y + 0.5);
+      ctx.stroke();
+    }
+
+    if (!analyser) return;
+    analyser.getByteFrequencyData(freqData);
+
+    const nyq = ac.sampleRate / 2;
+    const MAXF = 2400;
+    const bins = Math.floor(MAXF / nyq * freqData.length);
+
+    // spectrum
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < bins; i++) {
+      const x = (i / bins) * w;
+      const y = h - (freqData[i] / 255) * (h * 0.92);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "rgba(95,227,192,0.34)");
+    grad.addColorStop(1, "rgba(95,227,192,0.02)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.strokeStyle = css("--trace");
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // bank markers
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 1;
+    const mark = (list, color) => {
+      ctx.strokeStyle = color;
+      list.forEach(f => {
+        const x = (f / MAXF) * w;
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, h);
+        ctx.lineTo(x + 0.5, h * 0.12);
+        ctx.stroke();
+      });
+    };
+    mark(ROWS, css("--row-tone"));
+    mark(COLS, css("--col-tone"));
+    ctx.setLineDash([]);
+  }
+  draw();
+
+  // ---- receive: Goertzel -------------------------------------------------
+
+  // Energy at one exact frequency, over one block. Cheaper than an FFT when
+  // you already know the only twelve frequencies that matter.
+  function goertzel(buf, sampleRate, freq) {
+    const n = buf.length;
+    const k = Math.round((n * freq) / sampleRate);
+    const w = (2 * Math.PI * k) / n;
+    const cw = Math.cos(w), coeff = 2 * cw;
+    let s0 = 0, s1 = 0, s2 = 0;
+    for (let i = 0; i < n; i++) {
+      s0 = buf[i] + coeff * s1 - s2;
+      s2 = s1;
+      s1 = s0;
+    }
+    return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+  }
+
+  const ALL = ROWS.concat(COLS);
+  const THRESH = 6;      // strongest tone must beat the median bin by this
+  const FLOOR  = 1e-4;   // absolute silence gate
+  const CONFIRM = 3;     // consecutive blocks agreeing before a char is taken
+  const WIN = 1024;      // analysis window
+  const HOP = 512;       // slide by half a window: 2x timing resolution
+
+  let mic = null, node = null, stream = null;
+  let listening = false;
+  let out = "";
+
+  // Receiver state
+  let lastChar = null, runLen = 0, emittedThis = false;
+  let sil = 0, blip = 0, toneRun = 0;
+  let gaps = [], syms = [];
+
+  const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+  function resetRx() {
+    lastChar = null; runLen = 0; emittedThis = false;
+    sil = 0; blip = 0; toneRun = 0;
+    gaps = []; syms = [];
+  }
+
+  // A silence just ended. Was it the gap between two characters, or a word
+  // break? Two independent tests, either sufficient:
+  //   - relative: much longer than the typical gap seen so far
+  //   - absolute: longer than a symbol. The transmitter's gap is a fraction
+  //     of a symbol, so a silence that long can only be a break. This is the
+  //     only thing separating "A B C" from "ABC", where every silence is a
+  //     break and no ordinary gap is ever sent to compare against.
+  function endSilence() {
+    if (sil === 0) return;
+    const byRatio  = gaps.length >= 1 && sil >= median(gaps) * 2.2;
+    const bySymbol = syms.length >= 1 && sil >= median(syms) * 0.9;
+    const isBreak  = byRatio || bySymbol;
+
+    if (out && !out.endsWith(" ") && isBreak) { out += " "; render(); }
+
+    if (!isBreak) {                       // only real gaps train the model
+      gaps.push(sil);
+      if (gaps.length > 12) gaps.shift();
+    }
+    sil = 0;
+  }
+
+  const setStatus = (msg, err) => {
+    const el = $("rec-status");
+    el.textContent = msg;
+    el.classList.toggle("err", !!err);
+  };
+
+  function render() {
+    const el = $("decoded");
+    if (out) {
+      el.textContent = out;
+      el.classList.remove("empty");
+    } else {
+      el.textContent = "Decoded text appears here.";
+      el.classList.add("empty");
+    }
+  }
+
+  function analyse(buf, sr) {
+    // Absolute level gate — a quiet room must decode to nothing.
+    let rms = 0;
+    for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / buf.length);
+
+    const e = ALL.map(f => goertzel(buf, sr, f));
+
+    // Noise reference: the median bin. A real chord lights exactly two of the
+    // twelve, so the median stays at the noise floor and the ratio is honest.
+    const med = [...e].sort((a, b) => a - b)[Math.floor(e.length / 2)] || 1e-12;
+
+    let rBest = 0, cBest = 0;
+    for (let i = 1; i < 6; i++) if (e[i] > e[rBest]) rBest = i;
+    for (let i = 1; i < 6; i++) if (e[6 + i] > e[6 + cBest]) cBest = i;
+
+    const tone = rms >= FLOOR &&
+                 e[rBest] / med >= THRESH &&
+                 e[6 + cBest] / med >= THRESH;
+
+    if (tone) {
+      blip++;
+      // A lone flicker inside a silence is noise, not a symbol — it must not
+      // be allowed to cut a word break in half.
+      if (sil > 0 && blip < 2) return;
+      if (sil > 0) endSilence();
+
+      toneRun++;
+      const ch = fromPair.get(rBest + "," + cBest);
+      if (ch === lastChar) {
+        runLen++;
+      } else {
+        lastChar = ch; runLen = 1; emittedThis = false;
+      }
+      // Take the character once the same chord has held for CONFIRM windows.
+      if (runLen >= CONFIRM && !emittedThis) {
+        out += ch;
+        emittedThis = true;
+        flash(ch, 140);
+        render();
+      }
+    } else {
+      blip = 0;
+      if (toneRun >= CONFIRM) {           // a symbol just ended; learn its length
+        syms.push(toneRun);
+        if (syms.length > 12) syms.shift();
+      }
+      toneRun = 0;
+      sil++;
+      lastChar = null; runLen = 0; emittedThis = false;
+    }
+  }
+
+  async function startListening() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,   // these would chew up the tones
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+    } catch (err) {
+      setStatus("Microphone unavailable — " + (err && err.name ? err.name : "blocked"), true);
+      $("listen").setAttribute("aria-pressed", "false");
+      return;
+    }
+
+    const a = audio();
+    mic = a.createMediaStreamSource(stream);
+    node = a.createScriptProcessor(HOP, 1, 1);
+
+    // Sliding window: the detector sees WIN samples but advances only HOP
+    // each time, doubling timing resolution without shortening the window
+    // the Goertzel filters integrate over.
+    const chunk = new Float32Array(HOP);
+    const win = new Float32Array(WIN);
+
+    node.onaudioprocess = ev => {
+      if (!listening) return;
+      ev.inputBuffer.copyFromChannel(chunk, 0);
+      win.copyWithin(0, HOP);          // drop oldest half
+      win.set(chunk, WIN - HOP);       // append newest
+      analyse(win, a.sampleRate);
+    };
+
+    mic.connect(node);
+    // ScriptProcessor needs a sink to pump, but must not be audible:
+    // a zero gain keeps it running silently and avoids a feedback loop.
+    const sink = a.createGain();
+    sink.gain.value = 0;
+    node.connect(sink);
+    sink.connect(a.destination);
+
+    resetRx();
+    listening = true;
+    $("listen").setAttribute("aria-pressed", "true");
+    $("listen").textContent = "● Listening";
+    setStatus("Listening — play tones near the microphone");
+  }
+
+  function stopListening() {
+    listening = false;
+    if (node) { node.onaudioprocess = null; node.disconnect(); node = null; }
+    if (mic) { mic.disconnect(); mic = null; }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    $("listen").setAttribute("aria-pressed", "false");
+    $("listen").textContent = "● Listen";
+    setStatus("");
+  }
+
+  $("listen").addEventListener("click", () => {
+    if (listening) stopListening();
+    else startListening();
+  });
+
+  $("clear").addEventListener("click", () => {
+    out = "";
+    resetRx();
+    render();
+  });
+
+  window.addEventListener("pagehide", () => { stopAll(); stopListening(); });
+})();
+</script>
+</body>
+</html>

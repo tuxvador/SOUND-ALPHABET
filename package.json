@@ -1,0 +1,14 @@
+{
+  "name": "tonescript",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An alphabet where every character is a pair of tones — encoder, decoder, and a local server.",
+  "scripts": {
+    "start": "node server.js",
+    "serve:lan": "node server.js --https",
+    "test": "node test/decoder.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
