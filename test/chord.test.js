@@ -37,7 +37,7 @@ const SR=48000, ac={sampleRate:SR};
 const CHANN=new Float32Array(CWIN);
 for(let i=0;i<CWIN;i++)CHANN[i]=0.5-0.5*Math.cos(2*Math.PI*i/(CWIN-1));
 eval(grab('function goertzel(buf, sampleRate, freq)'));
-eval(grab('function decodeChordAt(buf)'));
+eval(grab('function decodeChordAt(buf, sr)'));
 eval(grab('function decompose(ch)'));
 eval(grab('function chordsOf(msg)'));
 

@@ -40,7 +40,7 @@ eval(grab('function decompose(ch)'));
   const src=lines.slice(a,b+1).join('\n').replace(/\bconst /g,'globalThis.');
   eval(src);
 }
-eval(grab('function decodeChordAt(buf)'));
+eval(grab('function decodeChordAt(buf, sr)'));
 eval(grab('function chordsOf(msg)'));
 console.log(`marks: ${MARKS.length} states, ACC_LEVEL=${ACC_LEVEL}`);
 

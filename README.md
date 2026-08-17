@@ -47,10 +47,18 @@ warning once. Transmit on one, listen on the other.
 > fine but the microphone will never start. The certificate is self-signed and
 > generated into `.cert/` on first use, so the browser warns once.
 
+**In the page, with no microphone.** The Receive panel has a **Test signals** section:
+pick a sample and press **Decode all**. The audio is generated in the page and fed
+straight to the same decoder the microphone uses, so nothing depends on speakers,
+room acoustics, or microphone permission — and it needs no AudioContext, so it works
+before any click has unlocked audio. A failure there means the codec is wrong, not
+that the volume was down. **Hear selected** plays a sample aloud if you do want to
+test the acoustic path.
+
 **Automated.** `npm test` extracts the decoder from `public/index.html` and runs it
-against synthesized audio — 17 messages across 60–400 ms symbol rates and additive
-noise, plus checks that silence and white noise decode to nothing. It exits
-non-zero on failure.
+against synthesized audio — messages across 60–400 ms symbol rates, accented words in
+six languages, and additive noise, plus checks that silence and white noise decode to
+nothing. It exits non-zero on failure.
 
 ## How it works
 

@@ -377,6 +377,101 @@
   }
   .status.err { color: var(--warn); }
 
+  /* ---------- self test ---------- */
+
+  fieldset.selftest {
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: var(--s3) var(--s4) var(--s4);
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+  }
+  fieldset.selftest legend { padding: 0 var(--s2); }
+
+  .selftest-lead {
+    margin: 0;
+    max-width: 66ch;
+    font-size: 13px;
+    color: var(--ink-mid);
+  }
+
+  .samples {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: var(--s2);
+  }
+
+  .sample {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+    padding: 9px var(--s3);
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--mono);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .sample:hover { border-color: var(--trace-dim); }
+  .sample[aria-pressed="true"] {
+    border-color: var(--trace);
+    background: var(--panel-hi);
+  }
+  .sample .txt {
+    font-size: 14px;
+    color: var(--trace);
+    flex: 1;
+    word-break: break-word;
+  }
+  .sample .tag {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-low);
+    white-space: nowrap;
+  }
+
+  .results {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .res {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--s3);
+    align-items: baseline;
+    padding: 9px var(--s3);
+    background: var(--panel);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .res .mark { font-weight: 700; }
+  .res.pass .mark { color: var(--trace); }
+  .res.fail .mark { color: var(--warn); }
+  .res .detail { color: var(--ink-mid); word-break: break-word; }
+  .res .detail b { color: var(--ink); font-weight: 600; }
+  .res .cond { color: var(--ink-low); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+  .res.fail .detail b { color: var(--warn); }
+
+  .res.summary {
+    background: var(--panel-hi);
+    grid-template-columns: 1fr auto;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
   /* ---------- spec table ---------- */
 
   .spec-scroll { overflow-x: auto; }
@@ -575,7 +670,7 @@
   <section>
     <div class="panel-head">
       <h2>Receive</h2>
-      <span class="panel-note">Goertzel detection &nbsp;/&nbsp; 12 bins</span>
+      <span class="panel-note">Goertzel detection &nbsp;/&nbsp; microphone or built-in signal</span>
     </div>
     <div class="panel-body">
       <div class="row">
@@ -584,6 +679,22 @@
         <span class="status" id="rec-status"></span>
       </div>
       <div class="readout empty" id="decoded">Decoded text appears here.</div>
+
+      <fieldset class="selftest">
+        <legend class="field-label">Test signals</legend>
+        <p class="selftest-lead">
+          Decode a generated signal without a microphone. The audio is built in the page and
+          fed straight to the receiver, so nothing depends on your speakers, your room, or
+          microphone permission. Play it aloud instead to test the acoustic path.
+        </p>
+        <div class="samples" id="samples"></div>
+        <div class="row">
+          <button class="primary" id="run-tests">Decode all</button>
+          <button id="hear-sample" disabled>♪ Hear selected</button>
+          <span class="status" id="test-status"></span>
+        </div>
+        <div class="results" id="results" hidden></div>
+      </fieldset>
       <div class="prose">
         <p>
           Play the transmitter aloud through speakers with this listening — the message
@@ -1284,10 +1395,14 @@
   let cfill = 0;                          // samples seen since listening began
   let cLoud = 0, cQuiet = 0, cArmed = false, cPeak = 0;
 
-  function decodeChordAt(buf) {
+  // `sr` is passed explicitly so the decoder can run with no AudioContext at
+  // all — the self test renders its own audio before any user gesture, and
+  // reaching for ac.sampleRate there would throw on a null context.
+  function decodeChordAt(buf, sr) {
+    const rate = sr || (ac && ac.sampleRate) || 48000;
     const w = new Float32Array(CWIN);
     for (let i = 0; i < CWIN; i++) w[i] = buf[i] * CHANN[i];
-    const e = CHORD_F.map(f => goertzel(w, ac.sampleRate, f));
+    const e = CHORD_F.map(f => goertzel(w, rate, f));
 
     const slot = [];
     for (let s = 0; s < SLOTS; s++) {
@@ -1445,6 +1560,179 @@
     out = "";
     resetRx();
     render();
+  });
+
+  // ---- self test ---------------------------------------------------------
+  //
+  // Generate a signal in the page and run it through the same decodeChordAt the
+  // microphone path uses. Nothing here depends on speakers, room acoustics, or
+  // microphone permission — so a failure means the codec is wrong, not that the
+  // volume was down.
+
+  const SAMPLES = [
+    { txt: "CAT",   tag: "plain" },
+    { txt: "ACT",   tag: "anagram" },
+    { txt: "SUN",   tag: "plain" },
+    { txt: "CAFÉ",  tag: "french" },
+    { txt: "NOËL",  tag: "french" },
+    { txt: "NIÑO",  tag: "spanish" },
+    { txt: "SÃO",   tag: "portuguese" },
+    { txt: "MÜN",   tag: "german" },
+    { txt: "42",    tag: "digits" },
+    { txt: "ÉTÉ",   tag: "accents" }
+  ];
+
+  let picked = 0;
+
+  // Render one chord to a plain sample buffer, mirroring what chord() sounds.
+  function renderChord(txt, sr, durSec, noise) {
+    const n = Math.round(sr * durSec);
+    const buf = new Float32Array(n);
+    const ramp = Math.round(sr * 0.025);
+    const scale = 0.30 / Math.sqrt(Math.max(1, [...txt].length));
+
+    [...txt].forEach((ch, i) => {
+      if (i >= SLOTS) return;
+      const dec = decompose(ch);
+      if (!dec) return;
+      const [base, mi] = dec;
+      const k = CHARS.indexOf(base);
+      if (k < 0) return;
+
+      const [lo, hi] = PAIRS[k];
+      const voices = [[BANKS[i][lo], 1], [BANKS[i][hi], 1]];
+      if (mi > 0) voices.push([BANKS[i][accentNote(lo, hi, mi)], ACC_LEVEL]);
+
+      for (const [f, amp] of voices) {
+        for (let j = 0; j < n; j++) {
+          let env = 1;
+          if (j < ramp) env = j / ramp;
+          else if (j > n - ramp) env = (n - j) / ramp;
+          // triangle: odd harmonics falling as 1/n²
+          let v = 0;
+          for (let h = 1; h <= 9; h += 2) {
+            v += (h % 4 === 1 ? 1 : -1) * Math.sin(2 * Math.PI * h * f * j / sr) / (h * h);
+          }
+          buf[j] += env * scale * amp * v * (8 / (Math.PI * Math.PI));
+        }
+      }
+    });
+
+    if (noise) for (let j = 0; j < n; j++) buf[j] += noise * (Math.random() * 2 - 1);
+    return buf;
+  }
+
+  // Decode a rendered buffer the same way the live receiver would: read the
+  // sustained middle of the chord.
+  function decodeRendered(buf, sr) {
+    const mid = Math.max(0, Math.floor(buf.length / 2 - CWIN / 2));
+    if (buf.length < CWIN) return "";
+    return decodeChordAt(buf.subarray(mid, mid + CWIN), sr);
+  }
+
+  function renderSamples() {
+    const host = $("samples");
+    host.textContent = "";
+    SAMPLES.forEach((s, i) => {
+      const b = document.createElement("button");
+      b.className = "sample";
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(i === picked));
+      b.innerHTML = '<span class="txt"></span><span class="tag"></span>';
+      b.querySelector(".txt").textContent = s.txt;
+      b.querySelector(".tag").textContent = s.tag;
+      b.addEventListener("click", () => {
+        picked = i;
+        renderSamples();
+        $("hear-sample").disabled = false;
+      });
+      host.appendChild(b);
+    });
+  }
+  renderSamples();
+
+  $("hear-sample").addEventListener("click", () => {
+    const s = SAMPLES[picked];
+    if (!s) return;
+    stopAll();
+    const a = audio();
+    let t = a.currentTime + 0.08;
+    const hold = Math.max(0.38, +$("rate").value / 1000 * 2);
+    for (const part of chordsOf(s.txt)) {
+      chord(part, t, hold);
+      const delay = Math.max(0, (t - a.currentTime) * 1000);
+      timers.push(setTimeout(() => [...part].forEach(c => flash(c, hold * 1000)), delay));
+      t += hold + hold * 0.6;
+    }
+    $("test-status").textContent = "Playing “" + s.txt + "”";
+    $("test-status").classList.remove("err");
+  });
+
+  $("run-tests").addEventListener("click", () => {
+    const host = $("results");
+    host.hidden = false;
+    host.textContent = "";
+    const sr = 48000;                    // fixed, so results don't vary by device
+    let pass = 0, total = 0;
+
+    const row = (ok, detail, cond) => {
+      const d = document.createElement("div");
+      d.className = "res " + (ok ? "pass" : "fail");
+      d.innerHTML = '<span class="mark"></span><span class="detail"></span><span class="cond"></span>';
+      d.querySelector(".mark").textContent = ok ? "✓" : "✕";
+      d.querySelector(".detail").innerHTML = detail;
+      d.querySelector(".cond").textContent = cond;
+      host.appendChild(d);
+    };
+
+    // Each sample, clean and with noise, through the real decoder.
+    for (const s of SAMPLES) {
+      for (const noise of [0, 0.05, 0.2]) {
+        const parts = chordsOf(s.txt);
+        const got = parts.map(p => decodeRendered(renderChord(p, sr, 0.45, noise), sr)).join(" ");
+        const want = parts.join(" ");
+        const ok = got === want;
+        total++; if (ok) pass++;
+        if (!ok || noise === 0) {
+          row(ok, ok ? "<b>" + want + "</b> decoded"
+                     : "<b>" + want + "</b> decoded as <b>" + (got || "nothing") + "</b>",
+              noise ? "noise " + noise : "clean");
+        }
+      }
+    }
+
+    // Silence and loud noise must decode to nothing — a receiver that invents
+    // letters from noise is worse than one that misses them.
+    const quiet = new Float32Array(CWIN);
+    let ok = decodeChordAt(quiet, sr) === "";
+    total++; if (ok) pass++;
+    row(ok, ok ? "silence decodes to <b>nothing</b>"
+               : "silence decoded as <b>" + decodeChordAt(quiet, sr) + "</b>", "rejection");
+
+    let falsePos = 0;
+    const TRIALS = 120;
+    for (let t = 0; t < TRIALS; t++) {
+      const b = new Float32Array(CWIN);
+      for (let i = 0; i < CWIN; i++) b[i] = 0.3 * (Math.random() * 2 - 1);
+      if (decodeChordAt(b, sr) !== "") falsePos++;
+    }
+    ok = falsePos === 0;
+    total++; if (ok) pass++;
+    row(ok, "white noise decoded as text <b>" + falsePos + "</b> of " + TRIALS + " times",
+        "rejection");
+
+    const sum = document.createElement("div");
+    sum.className = "res summary";
+    sum.innerHTML = '<span></span><span></span>';
+    sum.children[0].textContent = pass === total
+      ? "All checks passed"
+      : (total - pass) + " of " + total + " checks failed";
+    sum.children[1].textContent = pass + " / " + total;
+    sum.children[1].style.color = pass === total ? "var(--trace)" : "var(--warn)";
+    host.appendChild(sum);
+
+    $("test-status").textContent = "";
+    $("test-status").classList.toggle("err", pass !== total);
   });
 
   window.addEventListener("pagehide", () => { stopAll(); stopListening(); });
