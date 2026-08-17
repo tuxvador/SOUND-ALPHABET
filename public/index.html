@@ -682,10 +682,7 @@
 
       <div class="scope-frame">
         <canvas id="scope"></canvas>
-        <div class="scope-legend">
-          <span class="key"><span class="swatch" style="background:var(--row-tone)"></span>Row bank</span>
-          <span class="key"><span class="swatch" style="background:var(--col-tone)"></span>Column bank</span>
-        </div>
+        <div class="scope-legend" id="scope-legend"></div>
       </div>
     </div>
   </section>
@@ -1184,7 +1181,11 @@
       master = a.createGain();
       master.connect(a.destination);
       analyser = a.createAnalyser();
-      analyser.fftSize = 4096;
+      // 16384 gives ~2.9 Hz bins. The lowest register's notes are only ~15 Hz
+      // apart, which 4096 (11.7 Hz bins) smears together — the scope would then
+      // name the wrong letter for the first position while the later, wider
+      // registers read correctly.
+      analyser.fftSize = 16384;
       analyser.smoothingTimeConstant = 0.55;
       master.connect(analyser);
       freqData = new Uint8Array(analyser.frequencyBinCount);
@@ -1391,8 +1392,27 @@
 
   // Tempo drives chord mode; the ms rate drives letter-by-letter. Showing both
   // at once would imply the inactive one does something.
+  // The scope shows different things per mode, so its legend follows.
+  function syncLegend() {
+    const host = $("scope-legend");
+    if (!host) return;
+    const keys = mode() === "chord"
+      ? [["var(--trace)", "sounding note"], ["var(--line)", "scale note"]]
+      : [["var(--row-tone)", "row bank"], ["var(--col-tone)", "column bank"]];
+    host.textContent = "";
+    for (const [color, text] of keys) {
+      const k = document.createElement("span");
+      k.className = "key";
+      k.innerHTML = '<span class="swatch"></span>';
+      k.querySelector(".swatch").style.background = color;
+      k.appendChild(document.createTextNode(text));
+      host.appendChild(k);
+    }
+  }
+
   function syncTempoUI() {
     const chordMode = mode() === "chord";
+    syncLegend();
     $("bpm-wrap").style.display = chordMode ? "" : "none";
     $("rate-wrap").style.display = chordMode ? "none" : "";
     const beat = beatSec();
@@ -1448,7 +1468,11 @@
     analyser.getByteFrequencyData(freqData);
 
     const nyq = ac.sampleRate / 2;
-    const MAXF = 2400;
+    // Chord mode reaches the top of the third register (~4.2 kHz); the
+    // letter-by-letter banks stop well below 2 kHz. Scale the view to whichever
+    // is sounding, or the whole span would be mostly empty.
+    const chordMode = mode() === "chord";
+    const MAXF = chordMode ? 4400 : 2400;
     const bins = Math.floor(MAXF / nyq * freqData.length);
 
     // spectrum
@@ -1471,22 +1495,111 @@
     ctx.lineWidth = 1.4;
     ctx.stroke();
 
-    // bank markers
-    ctx.setLineDash([2, 4]);
-    ctx.lineWidth = 1;
-    const mark = (list, color) => {
-      ctx.strokeStyle = color;
-      list.forEach(f => {
-        const x = (f / MAXF) * w;
-        ctx.beginPath();
-        ctx.moveTo(x + 0.5, h);
-        ctx.lineTo(x + 0.5, h * 0.12);
-        ctx.stroke();
-      });
+    // Energy at one frequency, read straight off the spectrum, so a note can be
+    // called "lit" without re-running the decoder every frame.
+    // Read the single nearest bin. Peaking over neighbours would smear the low
+    // register, whose notes sit only a few bins apart, into one another.
+    const energyAt = f => {
+      const i = Math.round(f / nyq * freqData.length);
+      return (freqData[Math.max(0, Math.min(freqData.length - 1, i))] || 0) / 255;
     };
-    mark(ROWS, css("--row-tone"));
-    mark(COLS, css("--col-tone"));
-    ctx.setLineDash([]);
+
+    ctx.lineWidth = 1;
+
+    if (chordMode) {
+      // One marker per scale note, labelled. A note carrying part of the chord
+      // is drawn lit and named; the rest stay faint so the register structure
+      // is still legible.
+      const LIT = 0.45;
+      BANKS.forEach((bank, slot) => {
+        bank.forEach(f => {
+          const x = (f / MAXF) * w;
+          if (x < 0 || x > w) return;
+          const on = energyAt(f);
+          const lit = on >= LIT;
+
+          ctx.setLineDash(lit ? [] : [2, 4]);
+          ctx.strokeStyle = lit ? css("--trace") : css("--line");
+          ctx.globalAlpha = lit ? 1 : 0.7;
+          ctx.beginPath();
+          ctx.moveTo(x + 0.5, h);
+          ctx.lineTo(x + 0.5, lit ? h * 0.16 : h * 0.62);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+
+          if (lit) {
+            ctx.setLineDash([]);
+            ctx.fillStyle = css("--trace");
+            ctx.font = '600 10px ' + css("--mono");
+            ctx.textAlign = "center";
+            ctx.fillText(noteName(f), x, h * 0.13);
+          }
+        });
+      });
+      ctx.setLineDash([]);
+
+      // Name the character each register is currently sounding, above its
+      // own span of the spectrum — this is the letter you are hearing.
+      const label = [];
+      BANKS.forEach(bank => {
+        // Rank within the register and take the top two, the same way the
+        // decoder does. Filtering by a fixed threshold first lets a register
+        // with one loud note pair up with a neighbour's leakage and name the
+        // wrong letter.
+        const rank = bank.map((f, i) => [energyAt(f), i]).sort((a, b) => b[0] - a[0]);
+        if (rank[1][0] < LIT) return;              // needs two real notes
+        const [lo, hi] = [rank[0][1], rank[1][1]].sort((a, b) => a - b);
+        const k = PAIRS.findIndex(([x, y]) => x === lo && y === hi);
+        if (k < 0) return;
+        // One frame cannot reveal how long the chord will ring, so the
+        // short-set name is shown; the readout below gives the decoded truth.
+        label.push({ ch: CHARS[k], mid: (bank[lo] + bank[hi]) / 2 });
+      });
+
+      label.forEach(({ ch, mid }) => {
+        const x = (mid / MAXF) * w;
+        ctx.font = '700 22px ' + css("--sans");
+        ctx.textAlign = "center";
+        ctx.fillStyle = css("--trace");
+        ctx.globalAlpha = 0.92;
+        ctx.fillText(ch, x, h * 0.42);
+        ctx.globalAlpha = 1;
+      });
+    } else {
+      // Letter-by-letter: mark the two DTMF banks, and name the tone pair when
+      // both a row and a column are sounding.
+      ctx.setLineDash([2, 4]);
+      const mark = (list, color) => {
+        ctx.strokeStyle = color;
+        list.forEach(f => {
+          const x = (f / MAXF) * w;
+          ctx.beginPath();
+          ctx.moveTo(x + 0.5, h);
+          ctx.lineTo(x + 0.5, h * 0.12);
+          ctx.stroke();
+        });
+      };
+      mark(ROWS, css("--row-tone"));
+      mark(COLS, css("--col-tone"));
+      ctx.setLineDash([]);
+
+      const best = list => {
+        let bi = -1, bv = 0.45;
+        list.forEach((f, i) => { const e = energyAt(f); if (e > bv) { bv = e; bi = i; } });
+        return bi;
+      };
+      const r = best(ROWS), c = best(COLS);
+      if (r >= 0 && c >= 0) {
+        const ch = fromPair.get(r + "," + c);
+        if (ch) {
+          const x = ((ROWS[r] + COLS[c]) / 2 / MAXF) * w;
+          ctx.font = '700 22px ' + css("--sans");
+          ctx.textAlign = "center";
+          ctx.fillStyle = css("--trace");
+          ctx.fillText(ch, x, h * 0.42);
+        }
+      }
+    }
   }
   draw();
 
