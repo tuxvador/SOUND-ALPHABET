@@ -2,8 +2,8 @@
 
 An alphabet where every character is a sound rather than a glyph.
 
-Each of the 36 characters (A–Z, 0–9) is a pair of pure tones. There are two ways to
-sound a message:
+Each of the 45 characters (A–Z, 0–9 and `. , ' - ? ! : ( )`) is a pair of tones, and
+accented letters add a third. There are two ways to sound a message:
 
 - **Whole word** — every letter of a word sounds *at once*, as a single chord. A
   word is one sound, not a string of beeps.
@@ -64,40 +64,41 @@ nothing. It exits non-zero on failure.
 
 ### Whole-word chords
 
-Every tone is a real note of one scale — **A Dorian**, C4 to A7 — so whatever letters
+Every tone is a real note of one scale — **A Dorian**, B3 to C8 — so whatever letters
 sound together stack into a chord that belongs to a key, rather than a cluster of
 arbitrary frequencies.
 
-A letter is a **pair of notes**, and the interval identifies it. Nine notes give
-exactly `C(9,2) = 36` pairs, one per character with none left over. Each position in
-the word owns its own nine-note register, stacked low to high, so registers never
-overlap and two letters can never claim the same note — the reading stays unambiguous
-and anagrams still differ.
+A letter is a **pair of notes**, and the interval identifies it. Ten notes give
+exactly `C(10,2) = 45` pairs, one per character with none left over — 26 letters, 10
+digits, and 9 punctuation marks. Each position in the word owns its own ten-note
+register, stacked low to high, so registers never overlap and two letters can never
+claim the same note — the reading stays unambiguous and anagrams still differ.
 
 | | |
 |---|---|
-| Scale | A Dorian, C4–A7 (27 notes) |
+| Scale | A Dorian, B3–C8 (30 notes) |
+| Alphabet | A–Z, 0–9, and `. , ' - ? ! : ( )` (45 characters) |
 | Slots | 3 letters per chord (longer words chunk) |
-| Registers | 9 notes each, non-overlapping |
+| Registers | 10 notes each, non-overlapping |
 | Letter | a pair of notes; the interval carries it |
 | Accent | a third note at 45% level |
 | Timbre | triangle wave |
-| Spacing | ≥ 22 Hz (3.8 bins at the analysis window) |
+| Spacing | ≥ 14.7 Hz (2.5 bins at the analysis window) |
 | Chord length | ≥ 380 ms |
 | Analysis | 8192 samples, Hann-windowed, read once per chord |
 | Slot occupied | ≥ 6% of the loudest slot, and 2.5× its own register |
 
 The scale is deliberately gapped: its notes sit far enough apart to be separable at
 the analysis window. A denser scale sounds richer and decodes worse — that trade is
-what fixes the note count at 27, and so the slots at 3.
+what fixes the note count at 30, and so the slots at 3.
 
 ### Accents and languages
 
 Supported: **English, French, Spanish, Portuguese, Italian, German, Swedish.**
 
-Accented letters get no symbols of their own — there are exactly 36 pairs and no
-spare, and widening the register to fit ~91 precomposed characters would need 14
-notes per slot, collapsing the chord to a single letter.
+Accented letters get no pairs of their own — all 45 are spoken for, and widening the
+register to fit ~91 precomposed characters would need 14 notes per slot, collapsing
+the chord to a single letter.
 
 Instead a letter decomposes (Unicode NFD) into an ASCII base plus a combining mark:
 `É` is `E` + acute. The base uses its usual pair; the **mark rides on a third note**
@@ -170,6 +171,7 @@ against.
 public/index.html      the whole app: encoder, decoder, UI
 server.js              static server, no dependencies
 test/chord.test.js     whole-word chord codec
+test/accent.test.js    accents and punctuation
 test/decoder.test.js   letter-by-letter codec
 ```
 

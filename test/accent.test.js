@@ -12,14 +12,15 @@ const ACC_LEVEL=Number(html.match(/const ACC_LEVEL = ([\d.]+)/)[1]);
 const ACC_MIN=ACC_LEVEL*ACC_LEVEL/4;
 const ACC_SEP=Number(html.match(/const ACC_SEP = (\d+)/)[1]);
 const CONTRAST_MIN=Number(html.match(/const CONTRAST_MIN = (\d+)/)[1]);
-const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const SYMBOLS=html.match(/const SYMBOLS = "([^"]*)"/)[1];
+const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"+SYMBOLS;
 const midiHz=m=>440*Math.pow(2,(m-69)/12);
 const SCALE_DEG=JSON.parse(html.match(/const SCALE_DEG = (\[[^\]]+\])/)[1]);
 const SCALE_ROOT=num(/const SCALE_ROOT = (\d+)/);
 const SCALE_NOTES=[];
-for(let m=48;m<=105&&SCALE_NOTES.length<SLOTS*PER;m++){
+for(let m=48;m<=110&&SCALE_NOTES.length<SLOTS*PER;m++){
   if(!SCALE_DEG.includes((((m-SCALE_ROOT)%12)+12)%12))continue;
-  const f=midiHz(m);if(f>=260&&f<=3600)SCALE_NOTES.push(m);}
+  const f=midiHz(m);if(f>=240&&f<=4200)SCALE_NOTES.push(m);}
 const BANKS=[...Array(SLOTS)].map((_,s)=>SCALE_NOTES.slice(s*PER,(s+1)*PER).map(midiHz));
 const PAIRS=[];for(let i=0;i<PER;i++)for(let j=i+1;j<PER;j++)PAIRS.push([i,j]);
 const CHORD_F=[];BANKS.forEach(b=>CHORD_F.push(...b));
@@ -102,6 +103,21 @@ for(const nz of [0,0.05,0.20]){
 }
 console.log("\nchunking:");
 for(const s of ["CAFÉ NOËL","EL NIÑO AÑO","ŒUVRE Æ ß","Straße"]) console.log(`  ${s.padEnd(12)} -> ${JSON.stringify(chordsOf(s))}`);
+// Punctuation must round-trip. These decode into real characters now, so
+// "3.14" must not come back as "314" - silent corruption of a number is worse
+// than refusing to encode it.
+{
+  const punct=["3.1","1,0","DO'","A-B","X?Y","HI!","A:B","(HI",")AB",".,'","U.S","42."];
+  let o=0,bad=[];
+  for(const w of punct){ const g=dec1(w); if(g===w)o++; else bad.push(`${w}->${g}`); }
+  console.log(`\npunctuation: ${o}/${punct.length} ${bad.join(" ")}`);
+  if(o!==punct.length) allok=false;
+  // every declared symbol must be encodable
+  const missing=[...SYMBOLS].filter(c=>CHARS.indexOf(c)<0);
+  console.log(`symbols encodable: ${SYMBOLS.length-missing.length}/${SYMBOLS.length} ${missing.join(" ")}`);
+  if(missing.length) allok=false;
+}
+
 // Regression: pure noise must never decode as text. A contrast gate that is
 // too low lets random noise clear it a few percent of the time, which showed
 // up as phantom accented characters (1 in 8 runs before CONTRAST_MIN rose).

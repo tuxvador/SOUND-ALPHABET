@@ -9,14 +9,15 @@ function grab(sig){
 }
 const num=re=>{const m=html.match(re);if(!m)throw new Error('no '+re);return Number(m[1]);};
 const SLOTS=num(/const SLOTS = (\d+)/), PER=num(/const PER = (\d+)/), CWIN=num(/const CWIN = (\d+)/);
-const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const SYMBOLS=html.match(/const SYMBOLS = "([^"]*)"/)[1];
+const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"+SYMBOLS;
 const midiHz=m=>440*Math.pow(2,(m-69)/12);
 const SCALE_DEG=JSON.parse(html.match(/const SCALE_DEG = (\[[^\]]+\])/)[1]);
 const SCALE_ROOT=num(/const SCALE_ROOT = (\d+)/);
 const SCALE_NOTES=[];
-for(let m=48;m<=105&&SCALE_NOTES.length<SLOTS*PER;m++){
+for(let m=48;m<=110&&SCALE_NOTES.length<SLOTS*PER;m++){
   if(!SCALE_DEG.includes((((m-SCALE_ROOT)%12)+12)%12))continue;
-  const f=midiHz(m); if(f>=260&&f<=3600) SCALE_NOTES.push(m);
+  const f=midiHz(m); if(f>=240&&f<=4200) SCALE_NOTES.push(m);
 }
 const BANKS=[...Array(SLOTS)].map((_,s)=>SCALE_NOTES.slice(s*PER,(s+1)*PER).map(midiHz));
 const PAIRS=[];for(let i=0;i<PER;i++)for(let j=i+1;j<PER;j++)PAIRS.push([i,j]);
