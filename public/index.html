@@ -324,6 +324,95 @@
     font-weight: 700;
   }
 
+  /* ---------- character sets ---------- */
+
+  .setgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--s5);
+  }
+
+  .setblock { display: flex; flex-direction: column; gap: var(--s3); }
+
+  .sethead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--line);
+  }
+  .setname {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .setlen {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--trace-dim);
+  }
+
+  .chars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+    gap: var(--s1);
+  }
+
+  .ch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    background: var(--panel-hi);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: var(--mono);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .ch:hover { border-color: var(--trace-dim); }
+  .ch:hover .ch-glyph { color: var(--trace); }
+  .ch.lit {
+    background: var(--trace);
+    border-color: var(--trace);
+  }
+  .ch.lit .ch-glyph, .ch.lit .ch-notes { color: #06110D; }
+
+  .ch-glyph {
+    font-size: 17px;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .ch-notes {
+    font-size: 9px;
+    letter-spacing: 0.02em;
+    color: var(--ink-low);
+    white-space: nowrap;
+  }
+
+  .seq-detail {
+    border-top: 1px solid var(--line);
+    padding-top: var(--s4);
+  }
+  .seq-detail summary {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+    cursor: pointer;
+  }
+  .seq-detail summary:hover { color: var(--trace); }
+  .seq-detail[open] summary { margin-bottom: var(--s4); }
+  .seq-detail > .grid-scroll { margin-bottom: var(--s4); }
+
   /* ---------- scope ---------- */
 
   .scope-frame {
@@ -605,25 +694,50 @@
   <section>
     <div class="panel-head">
       <h2>The alphabet</h2>
-      <span class="panel-note">Click any character to sound it</span>
+      <span class="panel-note">90 characters &nbsp;/&nbsp; click any to sound it</span>
     </div>
     <div class="panel-body">
-      <div class="grid-scroll">
-        <table class="grid" id="grid"></table>
+      <p class="selftest-lead">
+        Every character is an interval — two notes from its register, named below the
+        glyph. The two sets use the <em>same</em> forty-five intervals; only the length of
+        the chord separates them, which is why <strong>A</strong> and <strong>;</strong>
+        share a pair. Notes shown are for the first letter position; later positions play
+        the same intervals an octave or two higher.
+      </p>
+
+      <div class="setgrid">
+        <div class="setblock">
+          <div class="sethead">
+            <span class="setname">Short chord</span>
+            <span class="setlen">1 beat</span>
+          </div>
+          <div class="chars" id="chars-short"></div>
+        </div>
+        <div class="setblock">
+          <div class="sethead">
+            <span class="setname">Long chord</span>
+            <span class="setlen">2 beats</span>
+          </div>
+          <div class="chars" id="chars-long"></div>
+        </div>
       </div>
-      <div class="prose">
-        <p>
-          Read a character's chord off its edges: <strong>W</strong> sits at row 1041 Hz and
-          column 1477 Hz, so <strong>W</strong> is those two frequencies played at once. No
-          frequency in either bank is a whole-number multiple of another, so the distortion
-          harmonics of a real tone never land on top of a different tone — a decoder can't be
-          fooled into hearing a letter that was never sent.
-        </p>
-        <p>
-          This grid is the <em>letter-by-letter</em> alphabet. Sounding a whole word at once
-          uses a second, larger set of banks — see below.
-        </p>
-      </div>
+
+      <details class="seq-detail">
+        <summary>Letter-by-letter alphabet (the other mode)</summary>
+        <div class="grid-scroll">
+          <table class="grid" id="grid"></table>
+        </div>
+        <div class="prose">
+          <p>
+            A different scheme, used only by the letter-by-letter mode: read a character's
+            two tones off the edges of the grid. <strong>W</strong> sits at row 1041 Hz and
+            column 1477 Hz. No frequency in either bank is a whole-number multiple of
+            another, so the distortion harmonics of a real tone never land on top of a
+            different tone — a decoder can't be fooled into hearing a letter that was never
+            sent.
+          </p>
+        </div>
+      </details>
     </div>
   </section>
 
@@ -1010,6 +1124,49 @@
       grid.appendChild(tr);
     });
   }
+
+  // ---- the chord alphabet, rendered from the real mapping ----------------
+  //
+  // Built from CHARS/CHARS_LONG and PAIRS rather than a hand-written table, so
+  // it cannot drift out of step with what the encoder actually sounds.
+
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const noteName = hz => {
+    const m = Math.round(69 + 12 * Math.log2(hz / 440));
+    return NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+  };
+
+  function buildCharSet(hostId, set, isLong) {
+    const host = $(hostId);
+    if (!host) return;
+    host.textContent = "";
+    [...set].forEach((ch, k) => {
+      const [lo, hi] = PAIRS[k];
+      // Position 0's register, which is what a single character sounds in.
+      const names = noteName(BANKS[0][lo]) + "+" + noteName(BANKS[0][hi]);
+
+      const b = document.createElement("button");
+      b.className = "ch";
+      b.type = "button";
+      b.id = "ch-" + (isLong ? "L" : "S") + k;
+      b.title = ch + " — " + names + (isLong ? ", long chord" : ", short chord");
+      b.innerHTML = '<span class="ch-glyph"></span><span class="ch-notes"></span>';
+      b.querySelector(".ch-glyph").textContent = ch;
+      b.querySelector(".ch-notes").textContent = names;
+
+      b.addEventListener("click", () => {
+        const beat = beatSec();
+        const dur = isLong ? beat * LONG_MULT : beat;
+        chord(ch, audio().currentTime, dur);
+        b.classList.add("lit");
+        setTimeout(() => b.classList.remove("lit"), Math.max(120, dur * 1000));
+      });
+      host.appendChild(b);
+    });
+  }
+
+  buildCharSet("chars-short", CHARS, false);
+  buildCharSet("chars-long", CHARS_LONG, true);
 
   function flash(ch, ms) {
     const el = $("cell-" + ch);
