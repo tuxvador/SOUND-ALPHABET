@@ -2,8 +2,9 @@
 
 An alphabet where every character is a sound rather than a glyph.
 
-Each of the 45 characters (A–Z, 0–9 and `. , ' - ? ! : ( )`) is a pair of tones, and
-accented letters add a third. There are two ways to sound a message:
+Each character is a pair of tones; accented letters add a third. Chord **length** picks
+between two 45-character sets, for **90 characters** in all. There are two ways to
+sound a message:
 
 - **Whole word** — every letter of a word sounds *at once*, as a single chord. A
   word is one sound, not a string of beeps.
@@ -77,7 +78,11 @@ claim the same note — the reading stays unambiguous and anagrams still differ.
 | | |
 |---|---|
 | Scale | A Dorian, B3–C8 (30 notes) |
-| Alphabet | A–Z, 0–9, and `. , ' - ? ! : ( )` (45 characters) |
+| Alphabet | 90 characters: 45 short + 45 long |
+| Short set | A–Z, 0–9, and `. , ' - ? ! : ( )` |
+| Long set | `; / " _ & @ # % = + * < > [ ] { } \| \\ ^ ~ ` $ ¿ ¡ « »` and currency/misc |
+| Tempo | 40–200 BPM, beat floored at 240 ms |
+| Long chord | 2 beats |
 | Slots | 3 letters per chord (longer words chunk) |
 | Registers | 10 notes each, non-overlapping |
 | Letter | a pair of notes; the interval carries it |
@@ -91,6 +96,19 @@ claim the same note — the reading stays unambiguous and anagrams still differ.
 The scale is deliberately gapped: its notes sit far enough apart to be separable at
 the analysis window. A denser scale sounds richer and decodes worse — that trade is
 what fixes the note count at 30, and so the slots at 3.
+
+### Length as a second dimension
+
+Notes are a frequency budget: a ten-note register holds `C(10,2) = 45` pairs and no
+more. But chord *duration* costs no notes, so the same 45 pairs mean one thing in a
+one-beat chord and another in a two-beat chord — **90 characters** without widening
+anything.
+
+Letters, digits and common punctuation stay short. Rarer symbols (`;` `=` `€` `¿` …)
+live in the long set and take twice as long to sound, which is the real cost.
+
+The receiver never assumes a tempo. It compares each chord against the shortest one
+it has heard, so any BPM decodes — verified from 60 to 180 BPM.
 
 ### Accents and languages
 

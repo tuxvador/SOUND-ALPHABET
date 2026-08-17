@@ -11,6 +11,7 @@ const num=re=>{const m=html.match(re);if(!m)throw new Error('no '+re);return Num
 const SLOTS=num(/const SLOTS = (\d+)/), PER=num(/const PER = (\d+)/), CWIN=num(/const CWIN = (\d+)/);
 const SYMBOLS=html.match(/const SYMBOLS = "([^"]*)"/)[1];
 const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"+SYMBOLS;
+const CHARS_LONG=eval(html.match(/const CHARS_LONG = ("(?:[^"\\]|\\.)*")/)[1]);
 const midiHz=m=>440*Math.pow(2,(m-69)/12);
 const SCALE_DEG=JSON.parse(html.match(/const SCALE_DEG = (\[[^\]]+\])/)[1]);
 const SCALE_ROOT=num(/const SCALE_ROOT = (\d+)/);
@@ -38,7 +39,7 @@ const SR=48000, ac={sampleRate:SR};
 const CHANN=new Float32Array(CWIN);
 for(let i=0;i<CWIN;i++)CHANN[i]=0.5-0.5*Math.cos(2*Math.PI*i/(CWIN-1));
 eval(grab('function goertzel(buf, sampleRate, freq)'));
-eval(grab('function decodeChordAt(buf, sr)'));
+eval(grab('function decodeChordAt(buf, sr, isLong)'));
 eval(grab('function decompose(ch)'));
 eval(grab('function chordsOf(msg)'));
 

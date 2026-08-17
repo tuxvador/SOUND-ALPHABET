@@ -14,6 +14,7 @@ const ACC_SEP=Number(html.match(/const ACC_SEP = (\d+)/)[1]);
 const CONTRAST_MIN=Number(html.match(/const CONTRAST_MIN = (\d+)/)[1]);
 const SYMBOLS=html.match(/const SYMBOLS = "([^"]*)"/)[1];
 const CHARS="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"+SYMBOLS;
+const CHARS_LONG=eval(html.match(/const CHARS_LONG = ("(?:[^"\\]|\\.)*")/)[1]);
 const midiHz=m=>440*Math.pow(2,(m-69)/12);
 const SCALE_DEG=JSON.parse(html.match(/const SCALE_DEG = (\[[^\]]+\])/)[1]);
 const SCALE_ROOT=num(/const SCALE_ROOT = (\d+)/);
@@ -41,7 +42,7 @@ eval(grab('function decompose(ch)'));
   const src=lines.slice(a,b+1).join('\n').replace(/\bconst /g,'globalThis.');
   eval(src);
 }
-eval(grab('function decodeChordAt(buf, sr)'));
+eval(grab('function decodeChordAt(buf, sr, isLong)'));
 eval(grab('function chordsOf(msg)'));
 console.log(`marks: ${MARKS.length} states, ACC_LEVEL=${ACC_LEVEL}`);
 
@@ -52,7 +53,7 @@ function synth(txt,durMs,noise){
   chars.forEach((ch,i)=>{
     if(i>=SLOTS)return;
     const dec=decompose(ch);if(!dec)return;
-    const [base,mi]=dec,k=CHARS.indexOf(base);if(k<0)return;
+    const [base,mi,isLong]=dec,k=(isLong?CHARS_LONG:CHARS).indexOf(base);if(k<0)return;
     const [lo,hi]=PAIRS[k];
     const voices=[[BANKS[i][lo],1],[BANKS[i][hi],1]];
     if(mi>0)voices.push([BANKS[i][accentNote(lo,hi,mi)],ACC_LEVEL]);
@@ -116,6 +117,32 @@ for(const s of ["CAFÉ NOËL","EL NIÑO AÑO","ŒUVRE Æ ß","Straße"]) console
   const missing=[...SYMBOLS].filter(c=>CHARS.indexOf(c)<0);
   console.log(`symbols encodable: ${SYMBOLS.length-missing.length}/${SYMBOLS.length} ${missing.join(" ")}`);
   if(missing.length) allok=false;
+}
+
+// Long set: the SAME pairs mean different characters in a long chord. Verify
+// every one round-trips, and that the two sets do not bleed into each other.
+{
+  const dLong=w=>{const g=synth(w,450,0);const m=Math.floor(g.length/2-CWIN/2);
+    return decodeChordAt(g.subarray(m,m+CWIN),SR,true);};
+  let o=0,bad=[];
+  for(let i=0;i<CHARS_LONG.length;i+=SLOTS){
+    const w=CHARS_LONG.slice(i,i+SLOTS);
+    const g=dLong(w);
+    if(g===w)o++; else bad.push(`${w}->${g}`);
+  }
+  const groups=Math.ceil(CHARS_LONG.length/SLOTS);
+  console.log(`\nlong set: ${o}/${groups} groups (${CHARS_LONG.length} chars) ${bad.slice(0,3).join(" ")}`);
+  if(o!==groups) allok=false;
+
+  // A short chord read as long (or vice versa) must give the OTHER character,
+  // never the same one - that is what proves duration carries information.
+  const probe="CAT";
+  const g=synth(probe,450,0), m=Math.floor(g.length/2-CWIN/2);
+  const asShort=decodeChordAt(g.subarray(m,m+CWIN),SR,false);
+  const asLong =decodeChordAt(g.subarray(m,m+CWIN),SR,true);
+  const distinct = asShort!==asLong && asShort===probe;
+  console.log(`set separation: "${asShort}" vs "${asLong}" ${distinct?"PASS":"FAIL"}`);
+  if(!distinct) allok=false;
 }
 
 // Regression: pure noise must never decode as text. A contrast gate that is
